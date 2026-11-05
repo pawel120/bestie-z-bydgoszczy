@@ -624,7 +624,7 @@ export class Whiteboard {
     el.style.transform = `translate(${card.x + index * (VARIANT_W + 20)}px, ${card.y + VARIANT_Y}px)`;
     const label = document.createElement("header");
     label.className = "variant-label";
-    label.innerHTML = `<i></i><span></span>`;
+    label.innerHTML = `<i></i><span></span><button class="horda-btn" title="Puść hordę person na kartę (A) i ten wariant (B)">🐝 A/B</button>`;
     (label.querySelector("i") as HTMLElement).style.background = CURSOR_COLORS[(index + 2) % CURSOR_COLORS.length];
     label.querySelector("span")!.textContent = `Agent ${index + 1} · ${direction}`;
     const host = document.createElement("div");
@@ -639,6 +639,14 @@ export class Whiteboard {
     const variant: Variant = { id, parent: card, direction, el, shadow, source: "", html: "" };
     card.variants.push(variant);
     this.variants.set(id, variant);
+    label.querySelector(".horda-btn")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      void this.testWithHorda(
+        { id: card.item.id, title: card.item.title, html: card.item.html },
+        { id: variant.id, title: variant.direction, html: variant.html },
+        label,
+      );
+    });
     // Double-click promotes a variant to the next version of the idea on the timeline.
     el.addEventListener("dblclick", () => this.promote(variant));
     el.title = "Dwuklik: wybierz ten wariant jako kolejną wersję";
@@ -665,6 +673,65 @@ export class Whiteboard {
     this.drawLinks();
     this.focusOn(card);
     void this.api.saveBoard([...this.cards.values()].map((c) => c.item));
+  }
+
+  // MARK: - Horda (Jev personas testing A vs B in a real browser)
+
+  /** The version a card should be compared against: the card it evolved from, or the base product's replica. */
+  private versionBefore(card: Card) {
+    if (card.item.from === "produkt" && this.product?.html) {
+      return { id: "produkt", title: "Produkt (oryginał)", html: this.product.html };
+    }
+    const from = this.cards.get(card.item.from);
+    return from?.item.html ? { id: from.item.id, title: from.item.title, html: from.item.html } : null;
+  }
+
+  private async testWithHorda(a: { id: string; title: string; html: string }, b: { id: string; title: string; html: string }, resultHost: HTMLElement) {
+    if (!a.html || !b.html) return this.onError("Obie wersje muszą być gotowe, zanim horda je przetestuje.");
+    const dialog = document.createElement("dialog");
+    dialog.className = "horda-viewer";
+    const header = document.createElement("header");
+    const title = document.createElement("div");
+    title.className = "horda-title";
+    title.textContent = `🐝 Horda · A: ${a.title}  vs  B: ${b.title}`;
+    const result = document.createElement("div");
+    result.className = "horda-result";
+    result.textContent = "Uruchamiam hordę…";
+    const close = document.createElement("button");
+    close.className = "ghost";
+    close.textContent = "Zamknij";
+    close.addEventListener("click", () => dialog.close());
+    header.append(title, result, close);
+    dialog.append(header);
+    dialog.addEventListener("close", () => dialog.remove());
+    document.body.append(dialog);
+    dialog.showModal();
+    const cursor = this.cursor("Horda");
+    try {
+      const url = await this.api.prepareHorda();
+      const wrap = document.createElement("div");
+      wrap.className = "horda-frame";
+      const frame = document.createElement("iframe");
+      frame.src = url;
+      wrap.append(frame);
+      dialog.append(wrap);
+      // Let Horda's panel connect to its event stream before the run starts, so it shows every persona.
+      await new Promise((r) => frame.addEventListener("load", r, { once: true }));
+      await new Promise((r) => setTimeout(r, 600));
+      result.textContent = "Persony klikają…";
+      const res = await this.api.runHorda({ id: a.id, html: a.html }, { id: b.id, html: b.html }, 12);
+      const summary = `🐝 Horda: A ${res.conv.A} → B ${res.conv.B}${res.pValue != null ? ` · p=${res.pValue.toFixed(2)}` : ""}`;
+      result.textContent = summary;
+      const line = document.createElement("p");
+      line.className = "horda-line";
+      line.textContent = `${summary}${res.headline ? ` — ${res.headline}` : ""}`;
+      resultHost.after(line);
+    } catch (err) {
+      result.textContent = String(err);
+      this.onError(String(err));
+    } finally {
+      cursor.done();
+    }
   }
 
   // MARK: - Agent cursors
@@ -714,7 +781,7 @@ export class Whiteboard {
     el.className = "frame";
     const label = document.createElement("header");
     label.className = "frame-label";
-    label.innerHTML = `<span class="kind"></span><span class="title"></span><span class="note"></span><span class="live">rysuję</span>`;
+    label.innerHTML = `<span class="kind"></span><span class="title"></span><span class="note"></span><span class="live">rysuję</span><button class="horda-btn" title="Puść hordę person (Jev) na poprzednią wersję (A) i tę (B)">🐝 Horda A/B</button>`;
     const host = document.createElement("div");
     host.className = "artboard";
     const shadow = host.attachShadow({ mode: "open" });
@@ -729,6 +796,13 @@ export class Whiteboard {
       item, col, x, y, el, label, title: label.querySelector(".title")!, host, shadow, quote, caption,
       drawing: false, createdAt: Date.now(), queue: Promise.resolve(), variants: [],
     };
+    const hordaButton = label.querySelector(".horda-btn") as HTMLButtonElement;
+    hordaButton.addEventListener("pointerdown", (e) => e.stopPropagation());
+    hordaButton.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const base = this.versionBefore(card);
+      if (base) void this.testWithHorda(base, { id: card.item.id, title: card.item.title, html: card.item.html }, card.caption);
+    });
     this.cards.set(item.id, card);
     this.emptyEl.hidden = true;
     this.fillLabels(card);
@@ -749,6 +823,7 @@ export class Whiteboard {
   private fillLabels(card: Card) {
     const { item } = card;
     card.el.dataset.kind = item.kind;
+    if (item.from) card.el.dataset.hasBase = "";
     card.title.textContent = item.title;
     card.label.querySelector(".kind")!.innerHTML = `${svg(KIND_ICON[item.kind])}${KIND_LABEL[item.kind]}`;
     card.quote.replaceChildren();
