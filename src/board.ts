@@ -134,6 +134,11 @@ Prefer edit over evolve and evolve over create; never duplicate a thread that al
 React ONLY to the lines marked >> (new since your last update); the other lines are context you already handled.
 Never make a card for a quote that is already on the board. "Change just the button", "faster", "tone it down" and
 similar corrections are an EDIT of the latest card they refer to, never a new version.
+When there is a base product, the board has a card "produkt": an editable replica of its real page. When people
+talk about changing the product itself (its landing, a button, copy, a section of the page), EVOLVE from card
+"produkt" (or from the newest card of thread "produkt") with thread "produkt" — the designer will edit the real page.
+Do not invent an unrelated screen for that. Brief such changes as concrete edits ("change the Contact Sales button
+to …", "add a social-proof row under the hero").
 If someone asks to draw something unrelated to the product ("narysuj drzewo", "narysuj jabłko"), just draw it:
 create a new thread with kind "idea" and a brief describing the drawing (an illustration made of HTML/CSS/SVG).
 When someone asks the board to propose ideas or to design something ("AI, pokaż pomysły", "zaprojektuj to"), do
@@ -436,6 +441,56 @@ async function drawWithClaude(
   addClaudeUsage(message.usage);
   if (message.stop_reason === "refusal") throw new Error("Claude odmówił narysowania tej karty.");
   return html;
+}
+
+const REPLICA_PROMPT = `Recreate the first screen of this web page (screenshot + layout map) as a faithful static replica:
+one HTML document, 960x600, the page scaled down from 1440x900. Output ONLY the HTML, starting with <!doctype html>.
+
+- Match it as closely as you can: layout and positions from the layout map, copy VERBATIM, colours, font sizes and
+  weights, spacing, radii, borders. It must look like a screenshot of the real page.
+- Tailwind classes (compiled for you; arbitrary values like text-[13px], bg-[#0a0a0a] are fine), no <script>,
+  no external URLs. Photos / product shots / illustrations → shapes and gradients approximating them; logos as
+  simple inline SVG or styled text. Skip cookie banners and chat widgets.
+- The replica will be EDITED later with str_replace (e.g. "change the Contact Sales button"), so keep the markup
+  clean: semantic sections (header/nav, hero, …), one element per visible block, readable class lists, flex/grid
+  layout rather than absolute positioning, distinct text so every element is easy to find.
+- <body class="m-0 w-[960px] h-[600px] overflow-hidden antialiased font-sans …"> with the page background.`;
+
+/** Once per product: an editable HTML replica of its first screen, the base for every change to the product. */
+export async function replicateProduct(apiKey: string, onPartial: (html: string) => void, signal: AbortSignal): Promise<Drawn> {
+  if (!product) throw new Error("Brak produktu bazowego.");
+  const client = new Anthropic({ apiKey });
+  const partial = throttledPartial(onPartial);
+  let html = "";
+  const stream = client.beta.messages.stream(
+    {
+      ...claudeDefaults,
+      max_tokens: 24_000,
+      system: [{ type: "text", text: REPLICA_PROMPT }],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: product.screenshot.split(",")[1] } },
+            {
+              type: "text",
+              text: `Page: ${product.title} (${product.url})\n\nDesign system:\n${product.designSystem}\n\nLayout map of the first screen (x,y WxH in the 960x600 frame, then the block):\n${product.layout}`,
+            },
+          ],
+        },
+      ],
+    },
+    { signal },
+  );
+  stream.on("text", (text) => {
+    html += text;
+    void partial(html);
+  });
+  const message = await stream.finalMessage();
+  addClaudeUsage(message.usage);
+  if (message.stop_reason === "refusal") throw new Error("Claude odmówił odtworzenia strony.");
+  const source = stripFences(html).trim();
+  return { source, html: await inlineTailwind(source) };
 }
 
 type EditorInput = { command: string; old_str?: string; new_str?: string; insert_line?: number; insert_text?: string; file_text?: string };

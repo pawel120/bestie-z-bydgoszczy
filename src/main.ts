@@ -2,7 +2,7 @@ import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session, she
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { boardToHtml, designCard, gateBoard, planBoard, resetCosts, setProduct, watchCosts, type BoardItem, type CardMeta, type PlanOp } from "./board";
+import { boardToHtml, designCard, gateBoard, planBoard, replicateProduct, resetCosts, setProduct, watchCosts, type BoardItem, type CardMeta, type PlanOp } from "./board";
 import { loadProduct } from "./product";
 
 // Dev convenience: load API keys from a gitignored .env next to package.json (packaged builds use Settings).
@@ -160,6 +160,12 @@ function registerIpc() {
     return product;
   });
   ipcMain.handle("product:clear", () => setProduct(null));
+  // Editable replica of the product's first screen (needs Claude); streams partial renders like a card.
+  ipcMain.handle("product:replicate", async (e) => {
+    const apiKey = await getApiKey("anthropic");
+    if (!apiKey) return null;
+    return replicateProduct(apiKey, (html) => e.sender.send("product:partial", html), new AbortController().signal);
+  });
   ipcMain.handle("costs:reset", () => resetCosts());
 
   ipcMain.handle("board:save", async (_e, board: BoardItem[]) => {

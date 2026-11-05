@@ -26,6 +26,11 @@ const api = {
   },
   loadProduct: (url: string): Promise<Product> => ipcRenderer.invoke("product:load", url),
   clearProduct: (): Promise<void> => ipcRenderer.invoke("product:clear"),
+  /** Null without a Claude key. */
+  replicateProduct: (): Promise<Drawn | null> => ipcRenderer.invoke("product:replicate"),
+  onProductPartial: (listener: (html: string) => void) => {
+    ipcRenderer.on("product:partial", (_e, html: string) => listener(html));
+  },
   onCosts: (listener: (costs: Costs) => void) => {
     ipcRenderer.on("costs", (_e, costs: Costs) => listener(costs));
   },

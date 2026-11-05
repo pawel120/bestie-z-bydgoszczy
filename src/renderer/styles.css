@@ -218,7 +218,8 @@ main { flex: 1; min-height: 0; display: flex; }
 .links { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
 .links path { fill: none; stroke: var(--accent); stroke-width: 4; opacity: .55; }
 .links path.from-product { stroke-dasharray: 14 12; opacity: .35; }
-.frame.product .artboard { display: block; object-fit: cover; cursor: default; }
+.frame.product .artboard { display: block; object-fit: cover; cursor: pointer; }
+.frame.product .artboard[hidden] { display: none; }
 .links marker path { fill: var(--accent); stroke: none; opacity: .8; }
 
 .frame-quote {

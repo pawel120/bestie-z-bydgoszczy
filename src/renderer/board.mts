@@ -133,8 +133,14 @@ export class Whiteboard {
   private zoomLabel: HTMLElement;
   private followButton: HTMLButtonElement;
   private selected: Card | null = null;
-  /** Base product frame, left of the timeline: the starting point every idea grows out of. */
-  private product: { el: HTMLElement; x: number; y: number } | null = null;
+  /**
+   * Base product frame, left of the timeline: the starting point every idea grows out of. Its editable replica
+   * (built once by Claude) is the base for every change to the product itself.
+   */
+  private product: {
+    el: HTMLElement; x: number; y: number; title: string; img: HTMLImageElement; shadow: ShadowRoot;
+    source: string; html: string; showReplica: boolean;
+  } | null = null;
 
   constructor(
     private api: BestieApi,
@@ -189,26 +195,65 @@ export class Whiteboard {
     this.setFollow(true);
   }
 
-  /** Shows the base product as the starting point of the timeline (null removes it). */
+  /** Shows the base product as the starting point of the timeline (null removes it) and builds its replica. */
   setProduct(product: { url: string; title: string; screenshot: string } | null) {
     this.product?.el.remove();
     this.product = null;
     if (product) {
       const el = document.createElement("section");
-      el.className = "frame product";
+      el.className = "frame product drawing";
       const label = document.createElement("header");
       label.className = "frame-label";
-      label.innerHTML = `<span class="kind">${svg('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>')}Produkt bazowy</span><span class="title"></span>`;
+      label.innerHTML = `<span class="kind">${svg('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>')}Produkt bazowy</span><span class="title"></span><span class="note"></span><span class="live">odtwarzam do edycji</span>`;
       label.querySelector(".title")!.textContent = `${product.title} · ${product.url.replace(/^https?:\/\//, "")}`;
-      const shot = document.createElement("img");
-      shot.className = "artboard";
-      shot.src = product.screenshot;
-      shot.alt = product.title;
-      el.append(label, shot);
+      const img = document.createElement("img");
+      img.className = "artboard";
+      img.src = product.screenshot;
+      img.alt = product.title;
+      const host = document.createElement("div");
+      host.className = "artboard replica";
+      host.hidden = true;
+      const shadow = host.attachShadow({ mode: "open" });
+      const caption = document.createElement("p");
+      caption.className = "frame-caption";
+      caption.textContent = "Odtwarzam stronę jako edytowalną replikę…";
+      el.append(label, img, host, caption);
       this.world.append(el);
-      this.product = { el, x: -(FRAME_W + GAP_X + 120), y: 0 };
+      this.product = { el, x: -(FRAME_W + GAP_X + 120), y: 0, title: product.title, img, shadow, source: "", html: "", showReplica: false };
       el.style.transform = `translate(${this.product.x}px, 0px)`;
       this.emptyEl.hidden = true;
+
+      // Click toggles between the real page and the replica, to check how faithful it is.
+      const current = this.product;
+      const toggle = () => {
+        if (!current.html) return;
+        current.showReplica = !current.showReplica;
+        img.hidden = current.showReplica;
+        host.hidden = !current.showReplica;
+        (label.querySelector(".note") as HTMLElement).textContent = current.showReplica ? "replika" : "oryginał";
+      };
+      img.addEventListener("click", toggle);
+      host.addEventListener("click", toggle);
+      this.api.onProductPartial((html) => this.product === current && this.render(shadow, html));
+      this.api
+        .replicateProduct()
+        .then((drawn) => {
+          if (this.product !== current) return;
+          el.classList.remove("drawing");
+          if (!drawn) {
+            caption.textContent = "Bez klucza Claude zmiany produktu są rysowane od zera.";
+            return;
+          }
+          current.source = drawn.source;
+          current.html = drawn.html;
+          this.render(shadow, drawn.html);
+          caption.textContent = "Replika gotowa: zmiany produktu edytują tę stronę. Kliknij, aby porównać z oryginałem.";
+        })
+        .catch((err) => {
+          el.classList.remove("drawing");
+          caption.textContent = "Nie udało się odtworzyć strony.";
+          this.onError(String(err));
+        });
     }
     this.drawLinks();
     this.fitAll(true);
@@ -272,7 +317,15 @@ export class Whiteboard {
   }
 
   private metas() {
-    return [...this.cards.values()].map(({ item: { source, html, ...meta } }) => meta);
+    const cards = [...this.cards.values()].map(({ item: { source, html, ...meta } }) => meta);
+    if (!this.product) return cards;
+    const product = {
+      id: "produkt", thread: "produkt", threadTitle: this.product.title, kind: "mockup" as Kind,
+      title: "Strona produktu (oryginał)",
+      summary: this.product.source ? "Edytowalna replika prawdziwej strony produktu" : "Zrzut strony produktu (replika w przygotowaniu)",
+      from: "", quote: "", at: "",
+    };
+    return [product, ...cards];
   }
 
   private async step(force = false) {
@@ -344,6 +397,23 @@ export class Whiteboard {
         const byTitle = [...this.lanes].find(([, lane]) => norm(lane.title.textContent ?? "") === norm(op.threadTitle));
         if (byTitle) op.thread = byTitle[0];
       }
+      // Changes to the base product: a new version in the product lane, built from the newest product version.
+      if (this.product && (op.thread === "produkt" || op.from === "produkt" || op.id === "produkt")) {
+        const latest = this.latestIn("produkt");
+        op.thread = "produkt";
+        op.threadTitle = this.product.title;
+        if (op.id === "produkt" || !latest || op.op !== "edit") op.op = "evolve";
+        if (op.op === "evolve") {
+          if (latest && Date.now() - latest.createdAt < 25_000) Object.assign(op, { op: "edit", id: latest.item.id });
+          else op.from = latest ? latest.item.id : "produkt";
+        }
+        if (op.op === "edit") op.id = latest!.item.id;
+        else op.id = this.uniqueId(op.id === "produkt" ? "produkt-v" : op.id || "produkt-v", (id) => this.cards.has(id) || id === "produkt");
+        if (threads.has(op.thread)) continue;
+        threads.add(op.thread);
+        out.push(op);
+        continue;
+      }
       const duplicate = [...this.cards.values()].find((c) => sameQuote(c.item.quote, op.quote));
       if (duplicate && op.op !== "edit") {
         Object.assign(op, { op: "edit", id: this.latestIn(duplicate.item.thread).item.id, thread: duplicate.item.thread });
@@ -387,12 +457,14 @@ export class Whiteboard {
       this.flash(card, "edytowano");
     } else {
       const lane = this.lane(op.thread, op.threadTitle);
+      const fromProduct = op.op === "evolve" && op.from === "produkt" && this.product;
       const from = op.op === "evolve" ? this.cards.get(op.from) : undefined;
+      const base = fromProduct ? { source: this.product!.source, html: this.product!.html } : { source: from?.item.source ?? "", html: from?.item.html ?? "" };
       card = this.createCard(
-        { id: op.id, thread: op.thread, threadTitle: op.threadTitle, kind: op.kind, title: op.title, summary: op.summary, from: from?.item.id ?? "", quote: op.quote, at: op.at, source: from?.item.source ?? "", html: from?.item.html ?? "" },
+        { id: op.id, thread: op.thread, threadTitle: op.threadTitle, kind: op.kind, title: op.title, summary: op.summary, from: fromProduct ? "produkt" : from?.item.id ?? "", quote: op.quote, at: op.at, source: base.source, html: base.html },
         lane,
       );
-      if (from?.item.html) this.setContent(card, from.item.html); // start from the previous version, then edit
+      if (base.html) this.setContent(card, base.html); // start from the previous version, then edit
       this.drawLinks();
       this.focusOn(card);
     }
@@ -537,10 +609,20 @@ export class Whiteboard {
       const dx = Math.max(80, (x1 - x0) / 2);
       paths.push(`<path d="M${x0} ${y0} C${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}" marker-end="url(#arrow)"/>`);
     }
-    // Every thread starts from the base product.
+    // Every thread starts from the base product: solid for versions of the product itself, dashed for other ideas.
     if (this.product) {
       const firsts = new Map<string, Card>();
       for (const card of this.cards.values()) {
+        if (card.item.from === "produkt") {
+          const x0 = this.product.x + FRAME_W;
+          const y0 = this.product.y + FRAME_H / 2;
+          const x1 = card.x - 14;
+          const y1 = card.y + FRAME_H / 2;
+          const dx = Math.max(80, (x1 - x0) / 2);
+          paths.push(`<path d="M${x0} ${y0} C${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}" marker-end="url(#arrow)"/>`);
+          continue;
+        }
+        if (card.item.thread === "produkt") continue;
         const first = firsts.get(card.item.thread);
         if (!first || card.col < first.col) firsts.set(card.item.thread, card);
       }
@@ -560,8 +642,12 @@ export class Whiteboard {
     card.el.style.transform = `translate(${card.x}px, ${card.y}px)`;
   }
 
-  /** Renders model HTML into the frame's shadow root: styles stay scoped and nothing has to reload. */
   private setContent(card: Card, html: string) {
+    this.render(card.shadow, html);
+  }
+
+  /** Renders model HTML into a shadow root: styles stay scoped and nothing has to reload. */
+  private render(shadow: ShadowRoot, html: string) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     sanitize(doc);
     const css = [...doc.querySelectorAll("style")].map((s) => s.textContent ?? "").join("\n");
@@ -576,7 +662,7 @@ export class Whiteboard {
     for (const node of [...doc.body.childNodes]) {
       if (node.nodeName !== "STYLE") page.append(document.importNode(node, true));
     }
-    card.shadow.replaceChildren(style, page);
+    shadow.replaceChildren(style, page);
   }
 
   private select(card: Card | null) {

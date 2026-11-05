@@ -13,6 +13,8 @@ export interface Product {
   reference: string;
   /** Fonts, colours, radii and the visible structure (nav, headings, buttons) as compact text. */
   designSystem: string;
+  /** Every visible text / image block of the first screen, in 960x600 coordinates, for an exact replica. */
+  layout: string;
 }
 
 // Runs inside the product page: frequency-ranked colours / fonts / radii plus the page's visible skeleton.
@@ -35,12 +37,34 @@ const EXTRACT = `(() => {
       count(radius, s.borderRadius);
     }
   }
+  // Layout map of the first screen, scaled from 1440x900 to the 960x600 card.
+  const k = 960 / innerWidth;
+  const layout = [];
+  for (const el of document.querySelectorAll("body *")) {
+    if (layout.length >= 160) break;
+    const r = el.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight || r.width < 6 || r.height < 6) continue;
+    const s = getComputedStyle(el);
+    if (s.visibility === "hidden" || s.opacity === "0") continue;
+    const box = Math.round(r.left * k) + "," + Math.round(r.top * k) + " " + Math.round(r.width * k) + "x" + Math.round(r.height * k);
+    const own = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent.trim()).join(" ").trim();
+    if (own) {
+      layout.push(box + " text " + Math.round(parseFloat(s.fontSize) * k) + "px w" + s.fontWeight + " " + s.color +
+        (s.backgroundColor !== "rgba(0, 0, 0, 0)" ? " bg " + s.backgroundColor : "") +
+        (parseFloat(s.borderRadius) ? " r" + Math.min(999, Math.round(parseFloat(s.borderRadius) * k)) : "") + ' "' + own.slice(0, 90) + '"');
+    } else if (el.matches("img, svg, video, canvas, picture") && r.width * r.height > 1500) {
+      layout.push(box + " " + el.tagName.toLowerCase() + (el.alt ? ' "' + el.alt.slice(0, 40) + '"' : ""));
+    } else if (s.backgroundColor !== "rgba(0, 0, 0, 0)" && r.width * r.height > 20000 && r.width < innerWidth) {
+      layout.push(box + " panel bg " + s.backgroundColor + (parseFloat(s.borderRadius) ? " r" + Math.round(parseFloat(s.borderRadius) * k) : ""));
+    }
+  }
   const texts = (sel, n) => [...document.querySelectorAll(sel)].filter(visible).map((e) => e.innerText.trim().replace(/\\s+/g, " ")).filter(Boolean).slice(0, n);
   return {
     title: document.title,
     description: document.querySelector('meta[name="description"], meta[property="og:description"]')?.content || "",
     body: getComputedStyle(document.body).backgroundColor,
     bg: top(bg, 5), text: top(text, 4), accent: top(accent, 4), fonts: top(fonts, 3), radius: top(radius, 3),
+    layout: layout.join(String.fromCharCode(10)),
     nav: texts("nav a, header a", 10), headings: texts("h1, h2, h3", 10), buttons: texts("button, [role=button]", 8),
   };
 })()`;
@@ -59,6 +83,13 @@ export async function loadProduct(url: string): Promise<Product> {
     ]);
     // Let client-side rendering, fonts and hero animations settle.
     await new Promise((r) => setTimeout(r, 2_500));
+    // Cookie / consent banners are not part of the product.
+    await win.webContents.executeJavaScript(`for (const el of document.querySelectorAll("body *")) {
+      const tag = (el.id + " " + el.className + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+      const fixed = ["fixed", "sticky"].includes(getComputedStyle(el).position);
+      if (/cookie|consent|gdpr|onetrust/.test(tag) || (fixed && /cookie|consent/i.test(el.innerText || "") && (el.innerText || "").length < 600)) el.remove();
+    }`);
+    await new Promise((r) => setTimeout(r, 300));
     const image = await win.webContents.capturePage();
     const d = (await win.webContents.executeJavaScript(EXTRACT)) as Record<string, string[] | string>;
     const list = (v: string[] | string) => (Array.isArray(v) ? v.join(", ") : v) || "—";
@@ -68,6 +99,7 @@ export async function loadProduct(url: string): Promise<Product> {
       description: String(d.description || ""),
       screenshot: `data:image/jpeg;base64,${image.resize({ width: 1440 }).toJPEG(82).toString("base64")}`,
       reference: image.resize({ width: 768 }).toJPEG(70).toString("base64"),
+      layout: String(d.layout || ""),
       designSystem: [
         `Page background: ${d.body}; large surfaces: ${list(d.bg)}`,
         `Text colours: ${list(d.text)}`,
