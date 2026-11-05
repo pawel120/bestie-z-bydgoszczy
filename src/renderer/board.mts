@@ -416,13 +416,17 @@ export class Whiteboard {
     this.clearTimers();
     this.busy = true;
     try {
-      if (!force && INTERNET_HINT.test(fresh.join(" "))) {
+      if (INTERNET_HINT.test(fresh.join(" "))) {
         this.setStatus("Słucham…");
         const context = this.lines.slice(Math.max(0, this.plannedLines - 6), this.plannedLines).join("");
-        const wanted = await this.api.internetIntent(context, fresh.join("")).catch(() => null);
-        if (wanted && wanted.action !== "none") {
+        const wanted = await this.api.internetIntent(context, fresh.join("")).catch((err) => {
+          this.onError(String(err));
+          return [];
+        });
+        if (wanted.length) {
           this.plannedLines = upTo;
-          void this.useInternet(wanted, fresh.join("")).catch((err) => this.onError(String(err)));
+          // Lines said close together arrive as one batch: every request in it counts.
+          for (const request of wanted) void this.useInternet(request, fresh.join("")).catch((err) => this.onError(String(err)));
           return;
         }
       }
@@ -469,7 +473,7 @@ export class Whiteboard {
 
   // MARK: - Internet
 
-  private async useInternet({ action, topic }: { action: string; topic: string }, said: string) {
+  private async useInternet({ action, topic, intoPage }: { action: string; topic: string; intoPage: boolean }, said: string) {
     if (action === "stop_video") return this.showVideo(null);
     const notes: Record<string, string> = { research: "szuka w sieci…", photos: "szuka grafik…", video: "szuka filmu…" };
     const agent = this.cursor(action === "research" ? "Researcher" : "Agent 1");
@@ -481,7 +485,10 @@ export class Whiteboard {
         if (!video) throw new Error(`Nie znalazłem filmu: ${topic}`);
         this.showVideo(video);
       } else if (action === "photos") {
-        this.fillWebCard(this.webCard(topic, at), topic, await this.api.findImages(topic));
+        const { urls, html } = await this.api.findImages(topic);
+        const page = intoPage ? this.pageBeingBuilt() : undefined;
+        if (page) this.putPhotos(page, topic, urls);
+        else this.fillWebCard(this.webCard(topic, at), topic, html);
       } else {
         const card = this.webCard(`Sprawdzam: ${topic}`.slice(0, 120), at);
         this.setDrawing(card, true);
@@ -495,6 +502,17 @@ export class Whiteboard {
     } finally {
       agent.done();
     }
+  }
+
+  /** The newest drawn card that isn't itself an internet result. */
+  private pageBeingBuilt() {
+    return [...this.cards.values()].filter((c) => c.item.thread !== "internet" && c.item.source).at(-1);
+  }
+
+  private putPhotos(card: Card, topic: string, urls: string[]) {
+    const { source: _source, html: _html, ...meta } = card.item;
+    const brief = `${topic}\nPut these real photos into the page with <img src> and object-cover, where they fit best. This replaces the rule against external images, for exactly these URLs:\n${urls.join("\n")}`;
+    this.apply({ ...meta, op: "edit", brief, explore: [] }, this.marked());
   }
 
   private webCard(title: string, at: string) {

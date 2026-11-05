@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { createBrowsing, hostOf } from "./browse.mjs";
 
 const MODEL = process.env.BESTIE_RESEARCH_MODEL || "claude-haiku-5-5"; // speed matters most: the room is waiting
-const QUERY_MODEL = "claude-haiku-5-5";
+const QUERY_MODEL = process.env.BESTIE_QUERY_MODEL || "claude-haiku-5-5";
 const SEARCH_COST = 0.01;
 const MAX_PAGES = 4;
 const MAX_TURNS = 10;

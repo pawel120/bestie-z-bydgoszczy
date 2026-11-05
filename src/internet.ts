@@ -8,10 +8,16 @@ const MODEL = process.env.BESTIE_RESEARCH_MODEL || "claude-haiku-5-5";
 const MAX_CONTINUATIONS = 3;
 const IMAGE_COUNT = 4;
 
-export type InternetAction = "research" | "photos" | "video" | "stop_video" | "none";
+export type InternetAction = "research" | "photos" | "video" | "stop_video";
 export interface InternetIntent {
   action: InternetAction;
   topic: string;
+  /** Photos only: they belong in the page being built, not next to it. */
+  intoPage: boolean;
+}
+export interface Images {
+  urls: string[];
+  html: string;
 }
 export interface Research {
   title: string;
@@ -22,22 +28,34 @@ export interface Video {
   title: string;
 }
 
-const ROUTE_PROMPT = `You listen to a live product brainstorm that drives a shared whiteboard. Decide whether the NEW lines ask for the internet.
+const ROUTE_PROMPT = `You listen to a live product brainstorm that drives a shared whiteboard. List what the NEW lines ask to do on the internet: one entry per separate request, in the order said, and an empty list when they ask for nothing of the kind.
 - research: finding competitors, opening a website, checking a market, prices or whether something is needed.
 - photos: asking for a picture, photo or visual inspiration.
 - video: asking to play or turn on a video, a YouTube clip or gameplay, such as Subway Surfers on the side. topic: only what to search for on YouTube.
 - stop_video: asking to turn off the video that is playing.
-- none: anything else, including product ideas, requests for mockups and small talk.
+Product ideas, requests for mockups and small talk are not requests here.
 Speech recognition makes mistakes and people interrupt themselves: judge intent, not exact words. Earlier lines are context only.
-topic: what to do, in one self-contained sentence in the conversation's language. Fill in what the earlier lines imply.`;
+topic: what to do, in one self-contained sentence in the conversation's language. Fill in what the earlier lines imply.
+intoPage: true when pictures should go into the page, screen or mockup being built, as in "put a photo of a pizza on the page"; false for pictures to look at, and for everything other than photos.`;
 
 const ROUTE_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["action", "topic"],
+  required: ["requests"],
   properties: {
-    action: { type: "string", enum: ["research", "photos", "video", "stop_video", "none"] },
-    topic: { type: "string" },
+    requests: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["action", "topic", "intoPage"],
+        properties: {
+          action: { type: "string", enum: ["research", "photos", "video", "stop_video"] },
+          topic: { type: "string" },
+          intoPage: { type: "boolean" },
+        },
+      },
+    },
   },
 };
 
@@ -69,7 +87,7 @@ const page = (body: string) =>
   `<!doctype html><html><body style="margin:0;height:600px;box-sizing:border-box;padding:44px 52px;overflow:hidden;background:#fff;color:#18181b;font-family:Inter,'Segoe UI',system-ui,sans-serif">${body}</body></html>`;
 
 /** Reads intent from what was said, so a request works however it is phrased. */
-export async function internetIntent(apiKey: string, earlier: string, fresh: string): Promise<InternetIntent> {
+export async function internetIntent(apiKey: string, earlier: string, fresh: string): Promise<InternetIntent[]> {
   const client = new Anthropic({ apiKey });
   const message = await client.messages.create({
     model: MODEL,
@@ -79,7 +97,7 @@ export async function internetIntent(apiKey: string, earlier: string, fresh: str
     messages: [{ role: "user", content: `Earlier lines:\n${earlier || "(none)"}\n\nNEW lines:\n${fresh}` }],
   } as never);
   countClaudeUsage(MODEL, (message as Anthropic.Message).usage);
-  return JSON.parse(textOf((message as Anthropic.Message).content)) as InternetIntent;
+  return (JSON.parse(textOf((message as Anthropic.Message).content)) as { requests: InternetIntent[] }).requests;
 }
 
 /** Searches, reads pages on Anthropic's servers and returns a text card with the verdict and its sources. */
@@ -125,7 +143,7 @@ export async function researchWeb(apiKey: string, request: string, context: stri
 }
 
 /** Real pictures from the web: Bing answers a query with its best match, and a plain <img> can load it anywhere. */
-export async function findImages(apiKey: string, request: string): Promise<string> {
+export async function findImages(apiKey: string, request: string): Promise<Images> {
   const client = new Anthropic({ apiKey });
   const message = (await client.messages.create({
     model: MODEL,
@@ -135,11 +153,11 @@ export async function findImages(apiKey: string, request: string): Promise<strin
   } as never)) as Anthropic.Message;
   countClaudeUsage(MODEL, message.usage);
   const { queries } = JSON.parse(textOf(message.content)) as { queries: string[] };
-  const images = queries
-    .slice(0, IMAGE_COUNT)
-    .map((q) => `<img alt="${escapeHtml(q)}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;background:#f4f4f5" src="https://tse1.mm.bing.net/th?q=${encodeURIComponent(q)}&w=640&h=420&c=7&rs=1&p=0">`)
+  const urls = queries.slice(0, IMAGE_COUNT).map((q) => `https://tse1.mm.bing.net/th?q=${encodeURIComponent(q)}&w=640&h=420&c=7&rs=1&p=0`);
+  const images = urls
+    .map((url) => `<img alt="" style="width:100%;height:100%;object-fit:cover;border-radius:10px;background:#f4f4f5" src="${escapeHtml(url)}">`)
     .join("");
-  return page(`<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px;height:100%">${images}</div>`);
+  return { urls, html: page(`<div style="display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:16px;height:100%">${images}</div>`) };
 }
 
 /** The top YouTube result, found by a web search because a web page can't read YouTube itself. */
