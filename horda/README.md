@@ -83,9 +83,12 @@ Uwaga: bliźniak „zna” prawdziwą ścieżkę na A, więc jego wynik na A nie
 
 **Kalibracja** (sekcja „Kalibracja na prawdziwych ludziach”, gdy są sesje na A i jest przebieg hordy): dla każdego
 kroku lejka A liczymy prawdopodobieństwo przejścia dalej u ludzi i u hordy, z wygładzeniem Laplace'a
-`cont_k = (n_k + 1) / (n_{k-1} + 2)`, i współczynnik `c_k = cont_ludzie / cont_horda` (przycięty do 0,2–5).
+`cont_k = (n_k + 1) / (n_{k-1} + 2)`, i współczynnik `c_k = cont_ludzie / cont_horda` (przycięty do 0,2–5), który potem ściągamy do 1 zależnie od liczby
+prawdziwych sesji `n` na poprzednim kroku: `c_k = 1 + (c_k − 1) · n / (n + 10)`, przycięte do 0,5–2 (przy 5 sesjach zostaje
+1/3 poprawki, przy 90 sesjach 90%). Bez tego kilka sesji potrafiło wypchnąć prognozę B do 100%.
 Te same współczynniki (po nazwie kroku; kroki, których nie ma na A albo bez danych, dostają 1) mnożą zasięg kroków
-hordy na B: zasięg_k(B) = surowy zasięg_k(B) × iloczyn c_j po krokach B do k. Panel pokazuje dla każdego kroku ludzi A,
+hordy na B w skali szans (odds): odds(zasięg_k(B)) = odds(surowy zasięg_k(B)) × iloczyn c_j po krokach B do k, czyli
+przesunięcie w skali logit jak w kalibracji Platta; dzięki temu prognoza nie przekracza 100%. Panel pokazuje dla każdego kroku ludzi A,
 hordę A, surową hordę B i B po kalibracji, prognozę konwersji B przed/po oraz błąd hordy na A przed kalibracją
 (średni bezwzględny błąd zasięgu kroków w punktach procentowych).
 

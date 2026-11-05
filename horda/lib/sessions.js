@@ -84,8 +84,9 @@ export function twinPersonas(personas, sessions, goal) {
 }
 
 // Kalibracja: porównujemy zasięg kroków lejka na A (prawdziwi ludzie vs horda) i przenosimy poprawkę na B.
-// c_k = real_cont_k / horde_cont_k, gdzie cont_k = (n_k + 1) / (n_{k-1} + 2) (wygładzenie Laplace'a), c_k ∈ [0.2, 5].
-// Prognoza B: zasięg kroku k = surowy zasięg B × iloczyn c_j po krokach B do k (kroki spoza A mają c = 1).
+// c_k = real_cont_k / horde_cont_k, gdzie cont_k = (n_k + 1) / (n_{k-1} + 2) (wygładzenie Laplace'a), surowe c_k ∈ [0.2, 5],
+// potem ściągnięte do 1: c_k = 1 + (c_k - 1) · n / (n + 10), n = prawdziwe sesje na kroku k-1, i przycięte do [0.5, 2].
+// Prognoza B: szanse zasięgu kroku k = szanse surowego zasięgu B × iloczyn c_j po krokach B do k (kroki spoza A mają c = 1).
 export function calibrate(realSessionsA, run, goal = 'sukces') {
   const results = run.results.filter(r => r.converted || !['limit_budzetu', 'blad_modelu', 'przerwane'].includes(r.reason));
   const hA = results.filter(r => r.variant === 'A'), hB = results.filter(r => r.variant === 'B');
@@ -98,19 +99,25 @@ export function calibrate(realSessionsA, run, goal = 'sukces') {
   const count = (paths, st) => paths.filter(p => p.includes(st)).length;
   const realPaths = realSessionsA.map(s => s.path), aPaths = hA.map(r => r.path), bPaths = hB.map(r => r.path);
   const stepsA = order.filter(st => count(realPaths, st) || count(aPaths, st));
-  const factor = {};
+  const factor = {}, rawFactor = {}, nReal = {};
   stepsA.forEach((st, k) => {
     if (k === 0) { factor[st] = 1; return; }
     const prev = stepsA[k - 1];
-    const realCont = (count(realPaths, st) + 1) / (count(realPaths, prev) + 2);
+    const nPrev = count(realPaths, prev);
+    const realCont = (count(realPaths, st) + 1) / (nPrev + 2);
     const hordeCont = (count(aPaths, st) + 1) / (count(aPaths, prev) + 2);
-    factor[st] = Math.max(0.2, Math.min(5, realCont / hordeCont));
+    const raw = Math.max(0.2, Math.min(5, realCont / hordeCont));
+    // Ściąganie do 1 przy małej próbie: przy n prawdziwych sesjach na poprzednim kroku zostaje n/(n+10) poprawki.
+    factor[st] = Math.max(0.5, Math.min(2, 1 + (raw - 1) * nPrev / (nPrev + 10)));
+    rawFactor[st] = raw; nReal[st] = nPrev;
   });
   const steps = order.map(st => ({
     step: st,
     realA: count(realPaths, st) / realPaths.length,
     hordeA: count(aPaths, st) / aPaths.length,
     c: factor[st] ?? 1,
+    cRaw: rawFactor[st] ?? 1,
+    nPrev: nReal[st] ?? null,
     inA: st in factor,
   }));
   const errSteps = steps.filter(s => s.inA);
@@ -121,7 +128,10 @@ export function calibrate(realSessionsA, run, goal = 'sukces') {
       s.rawB = count(bPaths, s.step) / bPaths.length;
       if (!s.rawB) { s.calB = 0; continue; }
       cum *= s.c;
-      s.calB = Math.max(0, Math.min(1, s.rawB * cum));
+      // Poprawkę nakładamy na szanse (odds), nie na prawdopodobieństwo: jak przesunięcie w skali logit u Platta,
+      // więc wynik zostaje w (0, 1) i nie nasyca się na 100% przy wysokim surowym zasięgu.
+      const odds = s.rawB >= 1 ? Infinity : s.rawB / (1 - s.rawB) * cum;
+      s.calB = odds === Infinity ? 1 : odds / (1 + odds);
     }
   }
   const goalStep = steps.find(s => s.step.includes(goal));
