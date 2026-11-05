@@ -66,6 +66,8 @@ export class ScribeSession {
       model_id: "scribe_v2_realtime",
       audio_format: "pcm_16000",
       commit_strategy: "vad",
+      // Commit after a short pause so lines land quickly; partials cover the rest.
+      vad_silence_threshold_secs: "0.5",
       token,
     });
     if (this.languageCode) params.set("language_code", this.languageCode);

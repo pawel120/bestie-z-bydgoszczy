@@ -1,5 +1,6 @@
 // Whiteboard brain: turns the running meeting transcript into mockups / flows / idea notes via Groq.
 
+import Anthropic from "@anthropic-ai/sdk";
 import { inlineTailwind } from "./tailwind";
 
 export interface BoardItem {
@@ -10,14 +11,11 @@ export interface BoardItem {
   html: string;
 }
 
-export interface BoardUpdate {
-  upserts: BoardItem[];
-  removals: string[];
-}
-
 export const GROQ_MODEL = "openai/gpt-oss-120b";
-/** Model that draws the cards; e.g. BESTIE_DESIGNER_MODEL=qwen/qwen3.8-27b to compare. */
+/** Groq model that draws the cards when no Claude key is set; e.g. BESTIE_DESIGNER_MODEL=qwen/qwen3.8-27b. */
 const DESIGNER_MODEL = process.env.BESTIE_DESIGNER_MODEL || GROQ_MODEL;
+/** With a Claude key, cards are drawn by Opus in fast mode: ~0.7 s to first token, ~390 tok/s, best-looking cards. */
+const CLAUDE_DESIGNER_MODEL = "claude-opus-5-5";
 
 const PLANNER_PROMPT = `You are the live whiteboard of a brainstorming meeting. People talk; you decide what the board
 should show so they can react to it while still talking.
@@ -48,7 +46,7 @@ Rules:
   Polish), even though these instructions are in English.
 - summary is one sentence on what changed and why.`;
 
-const DESIGNER_PROMPT = `You are a world-class product designer (Linear / Vercel / Stripe level) drawing one card of a
+export const DESIGNER_PROMPT = `You are a world-class product designer (Linear / Vercel / Stripe level) drawing one card of a
 live meeting whiteboard. Output ONLY a complete HTML document starting with <!doctype html> — no markdown fences, no
 commentary.
 
@@ -104,57 +102,161 @@ const PLAN_SCHEMA = {
   },
 };
 
-type PlannedItem = Omit<BoardItem, "html"> & { brief: string };
+export type PlannedItem = Omit<BoardItem, "html"> & { brief: string };
+
+export interface BoardPlan {
+  upserts: PlannedItem[];
+  removals: string[];
+}
 
 /** Keeps the prompt bounded on long meetings: the newest part of the transcript matters most. */
 const MAX_TRANSCRIPT_CHARS = 24_000;
+const recentPart = (transcript: string) =>
+  transcript.length > MAX_TRANSCRIPT_CHARS ? "…\n" + transcript.slice(-MAX_TRANSCRIPT_CHARS) : transcript;
 
-async function chat(apiKey: string, body: object, model = GROQ_MODEL): Promise<string> {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+function request(apiKey: string, body: object, model: string, signal?: AbortSignal) {
+  return fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, ...(model.startsWith("openai/") ? { reasoning_effort: "low" } : {}), ...body }),
+    signal,
   });
-  if (!res.ok) throw new Error(`Groq: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
-  const data = (await res.json()) as { choices: { message: { content: string } }[] };
-  return data.choices[0].message.content;
 }
 
-async function design(apiKey: string, item: PlannedItem, transcript: string): Promise<string> {
-  const html = await chat(apiKey, {
-    max_completion_tokens: 12_000,
-    messages: [
-      { role: "system", content: DESIGNER_PROMPT },
-      {
-        role: "user",
-        content: `Kind: ${item.kind}\nTitle: ${item.title}\nBrief: ${item.brief}\n\nRecent conversation for context:\n${transcript.slice(-4_000)}`,
-      },
-    ],
-  }, DESIGNER_MODEL);
-  return inlineTailwind(html.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "").trim());
+async function failure(res: Response) {
+  return new Error(`Groq: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
 }
 
-/** Planner decides what changes; designers draw the changed cards in parallel. */
-export async function updateBoard(apiKey: string, transcript: string, board: BoardItem[]): Promise<BoardUpdate> {
-  const recent =
-    transcript.length > MAX_TRANSCRIPT_CHARS ? "…\n" + transcript.slice(-MAX_TRANSCRIPT_CHARS) : transcript;
+/** Step 1 (~1 s): decide which cards to add / change / remove. */
+export async function planBoard(apiKey: string, transcript: string, board: Omit<BoardItem, "html">[]): Promise<BoardPlan> {
   const boardSummary = board.map(({ id, kind, title, summary }) => ({ id, kind, title, summary }));
-
-  const plan = JSON.parse(
-    await chat(apiKey, {
+  const res = await request(
+    apiKey,
+    {
       max_completion_tokens: 6_000,
       messages: [
         { role: "system", content: PLANNER_PROMPT },
-        { role: "user", content: `Current board:\n${JSON.stringify(boardSummary, null, 2)}\n\nTranscript:\n${recent}` },
+        {
+          role: "user",
+          content: `Current board:\n${JSON.stringify(boardSummary, null, 2)}\n\nTranscript (the last line may still be in progress):\n${recentPart(transcript)}`,
+        },
       ],
       response_format: { type: "json_schema", json_schema: { name: "board_plan", strict: true, schema: PLAN_SCHEMA } },
-    }),
-  ) as { upserts: PlannedItem[]; removals: string[] };
-
-  const upserts = await Promise.all(
-    plan.upserts.map(async ({ brief, ...item }) => ({ ...item, html: await design(apiKey, { ...item, brief }, recent) })),
+    },
+    GROQ_MODEL,
   );
-  return { upserts, removals: plan.removals };
+  if (!res.ok) throw await failure(res);
+  const data = (await res.json()) as { choices: { message: { content: string } }[] };
+  return JSON.parse(data.choices[0].message.content) as BoardPlan;
+}
+
+const stripFences = (html: string) => html.replace(/^\s*```(?:html)?\s*/i, "").replace(/```\s*$/, "");
+
+const designerInput = (item: PlannedItem, transcript: string) =>
+  `Kind: ${item.kind}\nTitle: ${item.title}\nBrief: ${item.brief}\n\nRecent conversation for context:\n${transcript.slice(-4_000)}`;
+
+/** Re-renders the partial card a few times per second; more would just make the iframe flicker. */
+function throttledPartial(onPartial: (html: string) => void) {
+  let lastEmit = 0;
+  return async (html: string) => {
+    if (Date.now() - lastEmit < 350 || html.length < 200) return;
+    lastEmit = Date.now();
+    onPartial(await inlineTailwind(stripFences(html)));
+  };
+}
+
+export interface DesignKeys {
+  groq: string;
+  anthropic: string;
+}
+
+/**
+ * Step 2: draw one card, streaming. `onPartial` gets the HTML so far (Tailwind already inlined) so the card can
+ * build up live; resolves with the final HTML.
+ */
+export async function designCard(
+  keys: DesignKeys,
+  item: PlannedItem,
+  transcript: string,
+  onPartial: (html: string) => void,
+  signal: AbortSignal,
+): Promise<string> {
+  const html = keys.anthropic
+    ? await designWithClaude(keys.anthropic, item, transcript, throttledPartial(onPartial), signal)
+    : await designWithGroq(keys.groq, item, transcript, throttledPartial(onPartial), signal);
+  return inlineTailwind(stripFences(html).trim());
+}
+
+async function designWithClaude(
+  apiKey: string,
+  item: PlannedItem,
+  transcript: string,
+  partial: (html: string) => Promise<void>,
+  signal: AbortSignal,
+) {
+  const client = new Anthropic({ apiKey });
+  let html = "";
+  const stream = client.beta.messages.stream(
+    {
+      model: CLAUDE_DESIGNER_MODEL,
+      max_tokens: 16_000,
+      speed: "fast",
+      betas: ["fast-mode-2026-02-01", "server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "low" },
+      system: DESIGNER_PROMPT,
+      messages: [{ role: "user", content: designerInput(item, transcript) }],
+    },
+    { signal },
+  );
+  stream.on("text", (text) => {
+    html += text;
+    void partial(html);
+  });
+  const message = await stream.finalMessage();
+  if (message.stop_reason === "refusal") throw new Error("Claude odmówił narysowania tej karty.");
+  return html;
+}
+
+async function designWithGroq(
+  apiKey: string,
+  item: PlannedItem,
+  transcript: string,
+  partial: (html: string) => Promise<void>,
+  signal: AbortSignal,
+) {
+  const res = await request(
+    apiKey,
+    {
+      stream: true,
+      max_completion_tokens: 12_000,
+      messages: [
+        { role: "system", content: DESIGNER_PROMPT },
+        { role: "user", content: designerInput(item, transcript) },
+      ],
+    },
+    DESIGNER_MODEL,
+    signal,
+  );
+  if (!res.ok || !res.body) throw await failure(res);
+
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let html = "";
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ") || line === "data: [DONE]") continue;
+      const delta = JSON.parse(line.slice(6)).choices?.[0]?.delta?.content;
+      if (delta) html += delta;
+    }
+    await partial(html);
+  }
+  return html;
 }
 
 /** Standalone gallery of the board, saved next to the recording. */

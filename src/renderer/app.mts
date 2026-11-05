@@ -112,8 +112,10 @@ function addSegment(segment: Segment) {
 function handle(speaker: Speaker, event: ScribeEvent) {
   if (event.type === "partial") {
     partials.set(speaker, event.text);
+    board.setPartial(speaker, event.text);
   } else if (event.type === "committed") {
     partials.delete(speaker);
+    board.setPartial(speaker, null);
     addSegment({ speaker, offset: (Date.now() - startedAt) / 1000, text: event.text });
   } else {
     setStatus(event.message);
@@ -259,7 +261,7 @@ window.addEventListener("keydown", (e) => {
 $("reveal").addEventListener("click", () => api.revealRecordings());
 languageSelect.addEventListener("change", () => api.setLanguage(languageSelect.value));
 $("save-keys").addEventListener("click", async () => {
-  for (const name of ["elevenlabs", "groq"] as const) {
+  for (const name of ["elevenlabs", "groq", "anthropic"] as const) {
     const input = $<HTMLInputElement>(`key-${name}`);
     if (input.value.trim()) await api.setApiKey(name, input.value.trim());
     input.value = "";
@@ -275,6 +277,7 @@ async function showKeyState() {
   const saved = "Zapisano ✓ (wklej nowy, aby zmienić)";
   if (settings.hasElevenLabsKey) $<HTMLInputElement>("key-elevenlabs").placeholder = saved;
   if (settings.hasGroqKey) $<HTMLInputElement>("key-groq").placeholder = saved;
+  if (settings.hasAnthropicKey) $<HTMLInputElement>("key-anthropic").placeholder = saved;
   boardToggle.checked = board.enabled = settings.hasGroqKey;
 }
 

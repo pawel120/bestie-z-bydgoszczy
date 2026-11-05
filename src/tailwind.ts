@@ -30,6 +30,11 @@ function candidates(html: string) {
 
 /** Returns the card HTML with the compiled Tailwind CSS injected into <head>. */
 export async function inlineTailwind(html: string): Promise<string> {
+  // Cards are offline and script-free: drop CDN links/scripts the model sometimes adds anyway.
+  html = html
+    .replace(/<script\b[\s\S]*?(<\/script>|$)/gi, "")
+    .replace(/<link\b[^>]*>/gi, "")
+    .replace(/@import[^;]*;/g, "");
   const css = (await getCompiler()).build(candidates(html));
   const style = `<style>${css}</style>`;
   if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${style}</head>`);
