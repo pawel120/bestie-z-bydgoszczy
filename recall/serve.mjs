@@ -46,8 +46,11 @@ server.on("upgrade", (req, socket, head) => {
   if (isBot && url.searchParams.get("token") !== token) return socket.destroy();
   wss.handleUpgrade(req, socket, head, (ws) => {
     if (isBot) {
+      latest = null; // a fresh bot page: drop the previous one's screen
       ws.on("message", (data) => {
-        latest = String(data);
+        const text = String(data);
+        if (text.startsWith('{"log"')) return console.log(`[bot ${new Date().toLocaleTimeString("pl")}] ${JSON.parse(text).log}`);
+        latest = text;
         for (const viewer of viewers) if (viewer.readyState === 1) viewer.send(latest);
       });
     } else {
