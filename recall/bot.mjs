@@ -53,14 +53,6 @@ async function recall(method, apiPath, body) {
   return text ? JSON.parse(text) : {};
 }
 
-function readLiveToken() {
-  try {
-    return readFileSync(path.join(here, ".live-token"), "utf8").trim();
-  } catch {
-    return undefined;
-  }
-}
-
 function pageUrl(base, bot) {
   const config = {
     elevenlabs: env.ELEVENLABS_API_KEY,
@@ -70,8 +62,6 @@ function pageUrl(base, bot) {
     lang: option("--lang") || env.BESTIE_LANG || "pl",
     bot,
     handsfree: true,
-    // Lets the bot's page push its screen to serve.mjs for the /#view live view.
-    live: readLiveToken(),
   };
   const encoded = Buffer.from(JSON.stringify(config)).toString("base64url");
   return `${base.replace(/\/?$/, "/")}#c=${encoded}`;
