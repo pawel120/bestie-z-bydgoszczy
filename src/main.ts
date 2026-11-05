@@ -142,7 +142,11 @@ function createWindow() {
     minWidth: 820,
     minHeight: 420,
     title: "Bestie",
-    webPreferences: { preload: path.join(__dirname, "preload.js") },
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      // The window is usually hidden behind the call app; timers must keep running for the board and replay.
+      backgroundThrottling: false,
+    },
   });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
 }
