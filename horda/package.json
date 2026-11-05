@@ -1,0 +1,14 @@
+{
+  "name": "horda",
+  "version": "0.1.0",
+  "description": "Horda agentów-person, które klikają przez Twoją apkę i w minutę mówią, gdzie i dlaczego tracisz konwersję.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "setup": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

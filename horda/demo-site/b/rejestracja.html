@@ -1,0 +1,12 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fakturix – załóż konto</title><link rel="stylesheet" href="../style.css"></head><body>
+<nav><b>Fakturix</b><div><a href="index.html">Produkt</a><a href="cennik.html">Cennik</a><a class="btn" style="padding:8px 14px;color:#fff" href="rejestracja.html">Wypróbuj</a></div></nav>
+<div class="wrap" style="max-width:460px"><h1>Zacznij za darmo</h1><p class="muted">14 dni, bez karty. Zajmie to 20 sekund.</p>
+<p><a class="btn ghost" style="width:100%;text-align:center" href="sukces.html">Kontynuuj z Google</a></p><p class="muted" style="text-align:center">albo</p>
+<form id="f" novalidate>
+<label for="b1">E-mail</label><input id="b1" type="email" autocomplete="email">
+<label for="b2">Hasło (min. 8 znaków)</label><input id="b2" type="password">
+<div class="err" id="err"></div>
+<button class="btn" style="width:100%" type="submit">Załóż konto</button></form>
+<p class="muted">Klikając akceptujesz regulamin. Nie wysyłamy spamu.</p></div>
+<script>document.getElementById('f').onsubmit=e=>{e.preventDefault();const em=document.getElementById('b1').value,p=document.getElementById('b2').value;const err=document.getElementById('err');
+if(!/.+@.+\..+/.test(em)){err.textContent='Podaj poprawny e-mail.';return}if(p.length<8){err.textContent='Hasło musi mieć min. 8 znaków.';return}location.href='sukces.html'}</script></body></html>
