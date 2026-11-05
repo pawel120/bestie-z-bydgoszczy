@@ -12,8 +12,6 @@ export interface PageConfig {
   bot?: boolean;
   /** Camera follows the conversation on its own (always on in the bot). */
   handsfree?: boolean;
-  /** Token for pushing the screen to the live view (serve.mjs). */
-  live?: string;
 }
 
 export function readConfig(): PageConfig {

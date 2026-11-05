@@ -127,113 +127,16 @@ const api: BestieApi = {
       ? replicateProduct(key("anthropic"), (html) => productListeners.forEach((l) => l(html)), new AbortController().signal)
       : null,
   onProductPartial: (listener) => void productListeners.push(listener),
-  // Horda (A/B tests with personas) runs a local Node server: desktop only.
-  prepareHorda: async () => {
-    throw new Error("Horda A/B działa tylko w aplikacji desktop");
-  },
-  runHorda: async () => {
-    throw new Error("Horda A/B działa tylko w aplikacji desktop");
-  },
   onCosts: (listener) => watchCosts(listener),
   resetCosts: async () => resetCosts(),
   saveBoard: async (items) => void (board = items),
 };
 
-// MARK: - Live view (/#view): the bot pushes snapshots of its screen, viewers replay them
-
-const VIEW_W = 1280;
-const VIEW_H = 720;
-const liveUrl = (role: string) =>
-  `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live?role=${role}${config.live ? `&token=${config.live}` : ""}`;
-
-/**
- * The body plus every shadow root (the cards) separately: hosts get a data-sr index, the viewer re-attaches them.
- * Plain innerHTML, so it works in older Chromium builds (the bot's browser) that lack getHTML().
- */
-function snapshot() {
-  const hosts = [...document.querySelectorAll("*")].filter((el) => el.shadowRoot);
-  hosts.forEach((el, i) => el.setAttribute("data-sr", String(i)));
-  const body = document.body.innerHTML;
-  hosts.forEach((el) => el.removeAttribute("data-sr"));
-  const shadows = hosts.map((el) => el.shadowRoot!.innerHTML);
-  const styles = [...document.head.querySelectorAll("style")].map((s) => s.textContent).join("\n");
-  // The theme follows the bot's (light) system setting: send the resolved colours so viewers look the same.
-  const computed = getComputedStyle(document.documentElement);
-  const theme = Object.fromEntries([...computed].filter((name) => name.startsWith("--")).map((name) => [name, computed.getPropertyValue(name)]));
-  return JSON.stringify({ body, shadows, bodyClass: document.body.className, styles, theme, dark: matchMedia("(prefers-color-scheme: dark)").matches });
-}
-
-function pushLive() {
-  let ws: WebSocket | null = null;
-  let last = "";
-  const log = (text: string) => ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ log: text }));
-  // The bot's console is invisible otherwise: forward errors and the status line to serve.mjs.
-  addEventListener("error", (e) => log(`error: ${e.message}`));
-  addEventListener("unhandledrejection", (e) => log(`rejection: ${e.reason}`));
-  const connect = () => {
-    ws = new WebSocket(liveUrl("bot"));
-    ws.onopen = () => log(`połączono · ${navigator.userAgent}`);
-    ws.onclose = () => window.setTimeout(connect, 2000);
-  };
-  connect();
-  let status = "";
-  window.setInterval(() => {
-    if (ws?.readyState !== WebSocket.OPEN) return;
-    try {
-      const next = snapshot();
-      if (next !== last) ws.send((last = next));
-      const now = document.getElementById("status")?.textContent ?? "";
-      if (now && now !== status) log(`status: ${(status = now)}`);
-    } catch (err) {
-      log(`snapshot: ${err}`);
-    }
-  }, 1000);
-}
-
-function viewLive() {
-  document.title = "Bestie · na żywo";
-  const extra = document.createElement("style");
-  document.head.append(extra);
-  const fit = document.createElement("style");
-  document.head.append(fit);
-  const resize = () => {
-    const k = Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H);
-    fit.textContent = `html { background: #000; overflow: hidden; }
-      body { width: ${VIEW_W}px !important; height: ${VIEW_H}px !important; transform-origin: 0 0; pointer-events: none;
-        transform: translate(${(innerWidth - VIEW_W * k) / 2}px, ${(innerHeight - VIEW_H * k) / 2}px) scale(${k}); }`;
-  };
-  addEventListener("resize", resize);
-  resize();
-  document.body.innerHTML = '<p style="color:#888;font:16px system-ui;text-align:center;margin-top:30vh">Czekam na obraz z bota…</p>';
-  const connect = () => {
-    const ws = new WebSocket(liveUrl("view"));
-    ws.onmessage = (e) => {
-      const { body, shadows, bodyClass, styles, theme, dark } = JSON.parse(String(e.data));
-      for (const [name, value] of Object.entries(theme ?? {})) document.documentElement.style.setProperty(name, String(value));
-      document.documentElement.style.colorScheme = dark ? "dark" : "light";
-      extra.textContent = styles;
-      document.body.className = bodyClass;
-      document.body.innerHTML = body;
-      for (const host of document.querySelectorAll<HTMLElement>("[data-sr]")) {
-        (host.shadowRoot ?? host.attachShadow({ mode: "open" })).innerHTML = shadows[Number(host.dataset.sr)] ?? "";
-      }
-    };
-    ws.onclose = () => window.setTimeout(connect, 2000);
-  };
-  connect();
-}
-
-const viewing = location.hash === "#view";
-if (viewing) viewLive();
-
 window.bestie = api;
 
-// In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable),
-// and no Horda buttons (desktop only).
-document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel, .horda-btn { display: none !important; }" }));
-if (viewing) throw new Error("live view"); // stop here: the viewer only replays the bot's screen
+// In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable).
+document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel { display: none !important; }" }));
 await import("../../src/renderer/app.mts");
-if (config.bot && config.live) pushLive();
 
 // The bot starts listening as soon as the page is up.
 if (config.bot) {
