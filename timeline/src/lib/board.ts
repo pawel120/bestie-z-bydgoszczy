@@ -35,8 +35,8 @@ export interface BoardData {
   ideas: Idea[]
 }
 
-export const MOCK_W = 508
-export const MOCK_H = 432
+export const MOCK_W = 566
+export const MOCK_H = 452
 export const BEAT_W = 300
 export const BEAT_H = 112
 export const PAD = 140
