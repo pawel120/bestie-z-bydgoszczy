@@ -55,7 +55,8 @@ function setState(next: typeof state) {
   state = next;
   recordButton.disabled = next !== "idle" && next !== "recording";
   replayButton.disabled = next !== "idle" && next !== "replaying";
-  replayButton.textContent = next === "replaying" ? "Zatrzymaj odtwarzanie" : "Wczytaj transkrypt";
+  replayButton.querySelector("span")!.textContent = next === "replaying" ? "Zatrzymaj" : "Wczytaj transkrypt";
+  document.body.classList.toggle("is-recording", next === "recording");
   recordButton.classList.toggle("recording", next === "recording");
   recordButton.querySelector("span")!.textContent = {
     idle: "Nagrywaj",
@@ -82,18 +83,22 @@ function renderTranscript() {
   for (const s of segments) transcriptEl.append(row(s.speaker, s.offset, s.text, false));
   for (const [speaker, text] of partials) if (text) transcriptEl.append(row(speaker, elapsed, text, true));
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  $("transcript-count").textContent = segments.length ? String(segments.length) : "";
 }
 
 function row(speaker: Speaker, offset: number, text: string, partial: boolean) {
   const el = document.createElement("div");
   el.className = `segment ${/^(ja|you|me)$/i.test(speaker) ? "me" : "others"}${partial ? " partial" : ""}`;
-  const time = document.createElement("time");
-  time.textContent = format(offset);
+  const meta = document.createElement("div");
+  meta.className = "meta";
   const who = document.createElement("strong");
   who.textContent = speaker;
+  const time = document.createElement("time");
+  time.textContent = partial ? "teraz" : format(offset);
+  meta.append(who, time);
   const body = document.createElement("p");
   body.textContent = text;
-  el.append(time, who, body);
+  el.append(meta, body);
   return el;
 }
 

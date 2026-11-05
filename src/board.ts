@@ -1,5 +1,7 @@
 // Whiteboard brain: turns the running meeting transcript into mockups / flows / idea notes via Groq.
 
+import { inlineTailwind } from "./tailwind";
+
 export interface BoardItem {
   id: string;
   kind: "mockup" | "flow" | "idea";
@@ -36,6 +38,9 @@ the key content and data, and what the group said about it. Be specific — the 
 Rules:
 - Prefer few strong items over many weak ones; keep the board at most 8 items. Merge variants into one item unless
   the group is explicitly comparing alternatives (then one mockup per variant).
+- Never add an item that overlaps an existing one (same product, same flow) — update or remove the old one instead.
+- Whenever the conversation is about a product, the board must contain a mockup of its main screen; that is what
+  makes the board useful. Ideas and flows support it.
 - When people refine an idea, update its existing item instead of creating a new one. Keep ids stable; new ids are
   short kebab-case slugs.
 - Only return items that are new or materially changed. Return empty arrays if nothing on the board should change.
@@ -43,21 +48,37 @@ Rules:
   Polish), even though these instructions are in English.
 - summary is one sentence on what changed and why.`;
 
-const DESIGNER_PROMPT = `You are a senior product designer drawing one card of a live meeting whiteboard.
-Output ONLY a complete HTML document (start with <!doctype html>), nothing else — no markdown fences, no comments
-about it.
+const DESIGNER_PROMPT = `You are a world-class product designer (Linear / Vercel / Stripe level) drawing one card of a
+live meeting whiteboard. Output ONLY a complete HTML document starting with <!doctype html> — no markdown fences, no
+commentary.
 
-Hard constraints: self-contained HTML + inline <style>; no <script>; no external images, fonts or URLs (use emoji,
-CSS shapes, gradients, system-ui font). Lay it out for exactly 960x600 px (body margin 0, nothing overflowing).
+STACK
+- Style exclusively with Tailwind CSS v4 utility classes in class="…" (they are compiled for you). No <style> blocks
+  unless something truly can't be done with utilities. No <script>. No external URLs, images or fonts.
+- <body class="m-0 w-[960px] h-[600px] overflow-hidden antialiased font-sans text-zinc-900 bg-white">.
+- Icons: inline <svg> in the Lucide style (viewBox="0 0 24 24", fill="none", stroke="currentColor", stroke-width="2",
+  stroke-linecap="round", stroke-linejoin="round", size-4 or size-5). NEVER use emoji as icons or decoration.
+- Never draw image placeholders (grey boxes, 🖼, "image here"). Use real content instead: avatars as coloured circles
+  with initials, charts as SVG paths or div bars, thumbnails as subtle gradients (from-indigo-500 to-violet-500 etc.).
 
-Quality bar:
-- mockup: a realistic app screen — real layout (nav/sidebar, header, content, cards, buttons, inputs, states),
-  coherent palette, clear typography hierarchy, generous spacing, believable copy and data. Never lorem ipsum,
-  never one centred box.
-- flow: a clean diagram of boxes, arrows (CSS borders / unicode ➜) and short labels, left-to-right or top-down,
-  with numbered steps and a highlighted key step.
-- idea: an elegant one-pager card — bold one-line pitch, then value / risks / open questions in columns.
-All copy in the language of the brief.`;
+VISUAL LANGUAGE
+- The card is viewed SCALED DOWN on a whiteboard (about 60%), so design big and bold: fewer, larger elements,
+  base text-base, labels text-sm minimum (never text-xs for content), headings text-3xl font-semibold tracking-tight.
+- Neutral zinc palette with ONE accent colour (indigo or violet by default) used sparingly for primary actions,
+  selection and key numbers. Plenty of white space; 8 px spacing grid (p-4, p-6, gap-3, gap-6).
+- Typography: text-sm text-zinc-500 for meta, font-medium for labels, max two font weights per block.
+- Surfaces: rounded-xl, border border-zinc-200, shadow-sm at most; dividers with divide-zinc-100.
+- Believable, specific copy and data in the language of the brief (names, numbers, dates, statuses). No lorem ipsum.
+
+BY KIND
+- mockup: a real app screen filling the 960x600 frame — typically a left sidebar (w-56, nav items with icons, one
+  active) or top bar, a page header with title + primary button, and a content area (lists, cards, tables, inputs,
+  states like "live", progress, avatars). Make the core idea of the brief the hero of the screen.
+- flow: a clean diagram with AT MOST 5 steps per row (merge minor steps; if there are more, use a second row) laid
+  out in a CSS grid with fixed column widths so nothing overlaps or overflows the 960 px width; each step is a card (numbered accent circle, icon, title, one-line description). Put connectors as separate flex items
+  BETWEEN cards (a short line + chevron SVG). Highlight the key step with the accent ring. Title + subtitle on top.
+- idea: an elegant one-pager — small eyebrow label, bold one-line pitch (text-2xl), a short paragraph, then three
+  columns "Wartość / Ryzyka / Otwarte pytania" (translated to the brief's language) with icon headers and 3 bullets.`;
 
 const PLAN_SCHEMA = {
   type: "object",
@@ -110,7 +131,7 @@ async function design(apiKey: string, item: PlannedItem, transcript: string): Pr
       },
     ],
   }, DESIGNER_MODEL);
-  return html.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "").trim();
+  return inlineTailwind(html.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/, "").trim());
 }
 
 /** Planner decides what changes; designers draw the changed cards in parallel. */

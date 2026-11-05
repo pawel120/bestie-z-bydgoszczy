@@ -38,5 +38,8 @@
     "electron": "^45.2.3",
     "electron-builder": "^26.18.0",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "tailwindcss": "^4.3.4"
   }
 }
