@@ -1,0 +1,171 @@
+[00:00] Speaker 1: Ogólnie tak jeśli chodzi o kategorię myślałem o, yy, o multiplayer AI ogólnie i myślałem, żeby w jakiś sposób tak koncepcyjnie połączyć, yy, żeby połączyć agentów z ludźmi, żeby ludzie współpracujący po prostu-- dlatego mi się spodobał ten najbar-najbardziej pierwszy punkt
+
+--- New Recording ---
+[00:00] You: pewien czytałem taki artykuł o tym, że coraz to nowsze modele co-- jak im dasz jakiś question, to z różnych AI labów modele do mediany zjeżdżają
+[00:07] You: Z różnych AI labów modele do mediany zjeżdżają, czyli dają ci bardzo-- coraz-- z każdą kolejną wersją coraz bardziej podobne odpowiedzi. Takie badanie. Więc wymyślałem-- i są takie właśnie metodologie, jak sprawić, żeby te agenty lepiej eksplorowały. To musi wiesz, taki być mix. Ty nadajesz kierunek, a potem agent go eksploruje, a nie w drugą stronę, że agent coś wymyśla-
+[00:23] You: ten agent go eksploruje, a nie w drugą stronę, że agent coś wymyśla, a potem ty pikujesz, że lepiej byś ten ród, żeby był od człowieka. No i w takim workflow jak my teraz siedzimy, byśmy sobie teraz preinstorowali, no to już byśmy mieli kilka mockupów, yy, wypikanych. No, zresztą nawet nagrałem nasze spotkanie. Będzie można to przetestować. No to, to jest-
+[00:37] You: Przetestować. No to, to jest fajne, no A co sądzicie o tych, o tym takim systemie do- CDC? Nie, tym, yy, drugim, który powiedziałem do pracy na wielu- Siemanko. Siemanko. Siema. W ogóle ten Paweł, my wagę daliśmy kiedyś. No tak, oczywiście, że tak. Yy, ile was jest w teamie? Trzech. Trzech.
+[00:54] You: Ile was jest w teamie? Trzech. A szukacie czwartego w teamie? [śmiech] Dobra, siadaj Paweł. No dobra, to się dogadaliśmy. No i git. Mam w ogóle... Bo ja tam miałem, mieliśmy zaklepane i tam jest monitor. Nie wiem czy go... Nieee, wywalone. Mamy telewizor. A, dobra. No i git.
+[01:09] You: Mamy telewizor A dobra, no i git. Dobra. Co sądzicie o tym? Jeszcze raz. Krytyka. Krytyka tego systemu do synchronizacji. Aha. Mało, mało takie widoki
+[01:23] You: Mało, mało takie widowiskowe No trochę tak. W sensie- Wiesz co byłoby widowiskowe? Jakbyśmy zrobili element bencha na tych takich benchmarkach implementacji czegoś. No, no i- I tak znacząco szybciej to zrobiło ... poprawiło, no. No czaję. No, no tak, no To by było-- to tylko wtedy by to miało efekt wow
+[01:37] You: To by było to tylko wtedy by to miało efekt wow. No, a to wymaga mega dużo pracy. A to wymaga też sprawienia, żeby tak było. Tak. [śmiech] Musimy zidentyfikować po prostu to. No to jest, to jest problem. Masz jakieś pomysły Paweł? Czy na zbity ryj przychodzisz? Na siłę mogę wygrać Lego z nami.
+[01:52] You: Na krzywą mordę trzeba nas wygrać, ile go znamy Na krzywą mordę. Okej Yy, a jakie macie-- dobra, wrócili te Elder. Czego wy macie? Co wy macie? No jeszcze nic. [śmiech] Ale nie wiem. Sprawdzali w ogóle coś robiliście jakiś? No bo to już wcześniej były te tematy. Coś sprawdzaliście czy- Nieee, coś tam myśleliśmy. Nie wolno przed. No właśnie, my myślimy na bieżąco. Najwcześniej wygrzeje w godzinę i- Tak, tak ... sukces
+[02:11] You: No się wcześniej wygrzeję w godzinę i sukces No. No mi się podoba to, to z meetingami na pewno. W sensie też- To weźmy w to. No zróbmy taki teraz ex-eksploitation. Jak mamy, zrobiliśmy eksplorację, to eksploatacja. Tak, tak, tak. I w sensie jeszcze-
+[02:22] You: Byśmy eksplorację zrobili razem Tak, tak, tak. I w sensie jeszcze jeden, jeszcze jedna rzecz, co by mi się spodobało, co ja bardzo lubię robić na hackathonach z powodu mojego doświadczenia, to że można się ludziom wpierdalać na apki, bo wszyscy są na tym samym Wi-Fi, więc byśmy mogli wszystkim ludziom wszystkie apki zescarpować, co ludzie zbudowali i możemy na naszej presce pokazać wszystkie apki, które ludzie zrobili
+[02:40] You: I możemy na naszej presce pokazać wszystkie apki, które ludzie zrobili. Teoretycznie i jakoś to wyeksploitować Pamiętaj, że mamy trzydzieści sek. W ogóle- Ale nie, przecież tu na Wi-Fi każdy jest inny. Każdy ma hotspota, nikt nie ma hasła. Nie no, jest wspólne Wi-Fi. Ja już skanowałem. Już MacBooki są na Wi-Fi.
+[02:56] You: I są na Wi-Fi
+[02:58] You: Aha, dobra. Okej, ale jakbyś chciał na wystawę pokazać to, co oni zrobili, to się chce robić taki flag, że to zrobiłeś? Czy że- No trochę. W sensie to jest zabawne, że możesz zajebać każdemu kod. O, zrobiliśmy taki projekt, taki też. Te-te też mamy. Ten też
+[02:58] You: Aha, dobra
+[03:08] You: O, zrobiliśmy taki projekt, taki też. Te-te też mamy. Ten też.
+[03:12] You: A bez kitu. Mega no. Bo i, i też to jest ciekawe, bo można im zajeb- I bait and switch robisz. No trochę tak. My zrobiliśmy to. I nagle pokazujesz kogoś innego. [śmiech] Tak, tak, tak. I mo-- też można im zajebać kod, no bo to są dev serwery i one wszystko share'ują. Okej. Więc to jest taka co-- cie-ciekawostka dla kogoś, kto o tym nie wie.
+[03:25] You: Ciekawostka dla kogoś, kto o tym nie wie, ale nie wiem, czy przydatna. No i na pewno to ja rażę. Można każdemu zabrać kod na hackathony.
+[03:35] You: Byłaś na hackathonie też? Tak. My tak robiliśmy z ziomalami. Okej. Ale w sensie nie kradliśmy kodu. Po prostu patrzyliśmy sobie na apki i jednomu gościowi wypaliliśmy to-tokeny po prostu
+[03:41] You: wynatki. Jednemu gościowi wypaliliśmy tokeny po prostu. Big time. No. Wypaliliście tokeny? No. No bo miał jakąś ap-, miał jakąś apkę AI i spamowaliśmy mu po prostu głupotami. Aha.
+[03:52] You: Spamowaliśmy mu po prostu głupotami.
+[03:56] You: No ale dobra, meetingi Eksploitujemy meetingi? No ja bym w to, ja bym w to szedł w real time AI. Tak. No bo rozruszałeś z tymi meetingami czy wspomniałeś to? O meetingach? Okej, case jest taki, że siadamy, tak jak masz takie spotkania jak nasze, albo może być online-
+[04:07] You: Masz takie, masz takie spotkanie jak nasze albo może być online, whatever i chcemy zbrainstormować jakieś naszej idea. Jest taka, takie flow, ja to opisywałem jako takie flow à la kapituła, ale nie musi być, że na kompach każdy z nas rzuca niezależnie pomysły. Jak wrzucisz pomysł, to odpala się, ee, agent, który ci robi mockup tego
+[04:22] You: To odpala się, ee, agent, który ci robi mockup tego. Drugi agent, który robi eksplorację tego pomysłu. Każdy nas to robi. Potem jest taki stop, hard stop. To się tam dogrzewa i mamy shared pomysły ludzi i AI-a, który zeksplorował i robimy taki głosowanko na ten temat. Na podstawie głosowania tam się coś działo, nie wiem co jeszcze
+[04:40] You: No powstaje głosowania, tam będzie coś działa, nie wiem co jeszcze. Ee, no i mamy, jeżeli się wykleją, nie wiem w jakim momencie te mockupy, że masz taki bardzo szybki feedback loop, że my o czymś dyskutujemy tak jak teraz i już byśmy mieli mockupy tych hubów. Takie wiesz, takie visu, chociaż taki user flow albo-
+[04:52] You: Takie wiesz, takie visum, chociaż taki user flow albo ten, cokolwiek. Tak, dobra i teraz ja bym jakoś kliknął, żeby to było podkręcić. A zaspoilować byś to chciał? Właśnie i co, co zrobić- A w jaki sposób chciałbyś podkręcić produktowy czy bardziej podkręcić dla deweloperów, żeby się spuścili na tym? W sensie chciałbyś na przykład zastopować, żeby to miało od razu-
+[05:07] You: Żeby się spuścić na tym. W sensie chciałbyś na przykład zestopować, żeby to miało od razu w tej produkcie miało tą, yy, infrę taką całą, która ci to spawnuje to? Czy bardziej chciałbyś podkręcać, że tak, że tak produktowo są jakieś funkcjonalności nowe? Mm, jakoś tak mega impresji jest pod względem jakby tego...
+[05:22] You: Po
+[05:24] You: prostu zrobić jakiś efekt wow. Dlaczego? Dlaczego to jest super? Bo to, to co teraz wymyśliliśmy, każdy sobie może wyobrazić jakby, że to może jakoś zadziałać, ale nie ma jeszcze tego efektu takiego wow, że nie wiedziałem, że to jest możliwe w ogóle. Dobra, skupmy się na tym, jak to było, jak to ma być prezentowane. To oni w ogóle my będziemy mieli szansę-
+[05:24] You: Po prostu zrobić jakiś efekt
+[05:30] Speaker: [dźwięk dzwonka]
+[05:37] You: Co ma być prezentowane? Oni w ogóle-- my będziemy mieli szansę w ogóle im powiedzieć, czy to bę-- czy oni tylko przeczytają read me? Przeczytają, przeklikają może. Możemy chyba pokazać trzy zasfundaowe czy coś. No coś takiego chyba. Tik-Tiktoka. Tiktoka, no. Ja też zrobię taką produktową. Ja bardzo lubię jak jest na hackathona robić takie produktowe kreski tak jak na Twittera się wrzuca. Jak się launchujesz product
+[05:54] You: Jak, jak na Twittera się wrzuca. Jakże- No ... launchujesz product, to taki viral moment Ta, ta, ta. No wiem, o co chodzi. Huk taki. Takiego huka łapiesz, że wiesz, że siedzisz z ziom-ziomki na spotkaniu i wiesz, i widzisz jak, kurwa, te pomysły się budują w tym czasie, kiedy oni gadają aż. No, no, no tylko-- w sensie co, co-
+[06:08] You: No, no, no. Tylko w sensie to, to co by było jakby tak crazy wychodząc z tego co jest crazy, to na przykład jakby w trakcie spotkania te pomysły już jakby zrobiły revenue na przykład. To, to by było crazy. W sensie- A to by było, to jest już takie crazy, crazy, crazy. Tak. No o to mi chodzi. Ja szukam takich crazy, crazy, crazy, które są wykonalne
+[06:22] You: Tak. No o to mi chodzi. Ja szukam takich crazy, crazy, crazy, które są wykonalne rzeczywiście A to nie jest taki plugin do Lovable po prostu? Bo to jest in the end kończymy na tym, że zrobimy Lovablem. No t-trochę tak. No i właśnie co tu, co tu można jeszcze wymienić takiego ciekawego? Yy, jak, jak gadasz sobie real time z kimś, no to jest agent, który wciąż może jakby od razu zacząć pracę, coś, coś tam robić
+[06:38] You: Który wciąż może od razu zacząć pracę, coś, coś tam robić. Yy, no i teoretycznie ci agenci mogą nawet ze sobą się komunikować. Jak my teraz jesteśmy na meetingu, to nie mogą ze sobą gadać A może zróbmy takie coś, że agent, że jak gadamy, no to agent rozróżnia spikerów, co nie? No Załóżmy buduje kilka wersji każdego
+[06:52] You: To rozróżnia speakerów, co nie? No Żebyśmy budują kilka wersji każdego. Mhm. Yy, że nie wiem, ja mówię jakąś swoją wizję, ty mówisz ten i masz od razu porównanie jak to wygląda, co nie? Mhm. Okej, okej. Czyli taka mapa, mapa myśli trochę mapa mockupów od razu podczas- Tak, tak od razu wiesz, od razu prototypowanie od razu- Wydaje mi się
+[07:07] You: Tak, od razu wiesz, od razu prototypowanie od razu- Wydaje mi się- No ... że jak skupimy się na mockupach, a nie na gotowym produk-- no możemy showcase'ować jakby kompletność tego- No ... czyli taki revenue based powiedzmy, że kompletność tego projektu albo prędkość tej iteracji. Tak. Czyli przy takim hike'u będzie zajebisty harness, który szybko robi takie mockupowe komponenty. Taki- No, no ... easy coping w powiedzmy sposób, wiesz co. No, no, no.
+[07:25] You: Taki nie-sloppy powiedzmy sposób, wiesz o co chodzi No, no, no. No jest pytanie, czy prędkość będzie aż tak impressive, czy- No jakbyś to demował, że to-- ta, no Znaczy ja widzę takiego whiteboarda po prostu, który zamiast człowieka, który na nim pisze, to pisze AI
+[07:39] You: Się to pisze AI przez-- a po prostu my piszemy prompty, a AI robi sam whiteboard'a, który ładnie pokazuje to, o czym gadamy No po prostu czy to jest impressive? No nie wiem. No nie, nie jest to impressive Nie wiem, czy to hyci na Readme, nie? Bo to-- bo moglibyśmy to zrobić zajebiście, ale pomysł nie hyci
+[07:54] You: Nie, bo to, bo moglibyśmy zrobić zajebiście, ale pomysł nie chwyci No w sensie no, jakby nie, nie jest to impresja Nie, że to w ogóle wchodzi w kogokolwiek workflow, co nie? Że- No A znacie Tester Army? No tak. No. No bo możemy na przykład zrobić coś, ale Tester Army po prostu
+[08:07] You: Zrobić coś à la Tester Army po prostu
+[08:11] You: Czy Tester Army jest impressive po tym, jak spilotowali?
+[08:15] You: Już nie robią tego, co robili? Nie robią end-to- W sensie robią end-to-end właśnie, a nie Tester Army. No a, no to mi chodzi o end-to-end. No że end-to-end to jest produkt Tester Army. Jakbyśmy zrobili po prostu jakiś produkt end-to-endzik inny
+[08:22] You: Product testerami. Jakbyśmy zrobili po prostu jakiś produkt end-to-end i- No co w tym jest, co w tym jest ciekawego? W sensie, w sensie nie wiem, co w tym jest ciekawego, skoro to już jest jakby. No właśnie- I Ż-Żyli bardzo dobrze zna ten produkt jeszcze. No dobra, no to, to, to wtedy tak. To było śmieszne. Ja ostatnio w sobotę przegrałem z gościem, który skopiował end-to-end. Serio? Co?
+[08:37] You: Grałem z gościem, który skopiował MT-a Serio? No co? O, o tym mówię, nie? Że na tym się, na tym się ten... Ja muszę na chwilę wyjść, bo mnie dołączyli do jakiegoś teamu innego i ten- Aha, okej, spoko ... i dobrze mnie wyrzucili Enjoy.
+[08:49] You: No. A my dogrzajemy w tym czasie. No my dogrzewamy. Ee
+[08:52] You: Yy.
+[08:55] You: Speed czy kompletność? Bo z kompletnością się boję konkurować, bo już wchodzisz bardzo blisko w terytorium Novabla. No. I twoja apka przestaje być, yy, czymś do eksploracji podczas spotkania takiego brainstormingu- No ... do interaktywnego wsparcia brainstormingu, tylko wchodzisz w terytorium, yy, tworzenia produktu
+[09:08] You: Wchodzisz w terytorium, yy, tworzenia produktów Mhm i z pro- Czaję A jak zostajesz w prędkości, to nadal jesteś apką do zainstalowania przez-- do eksploracji. Tak, tak, tak. No py-pytanie jakie to jest, wiesz, jaki jest value końcowy z tego? Bo ja nie chcę robić czegoś, co jest offer-
+[09:22] You: value końcowe z tego, bo ja nie chcę robić czegoś, co jest: „O, fajne, raz użyję”. Tylko chcę zrobić coś- Fajnie wygląda. O, fajnie wygląda. Tylko że o, o kurwa, yy, to jest game changer. Tego szukam, a nie, że o ciekawostka.
+[09:37] You: Więc to pytanie, na ile to może być game changerem rzeczywiście?
+[09:38] You: Ile to może być game changerem rzeczywiście?
+[09:42] You: Jak-- w jaki sposób to może dać takie insane value?
+[09:52] You: Chyba że, yy, ewentualnie, wiesz, m-mówimy sobie-
+[09:54] You: Ewentualnie. Wiesz, mówimy sobie jakieś rzeczy. Tylko pytanie, czy technologia jest na to gotowa? Że mamy jakieś hipotezy. Na przykład, nie wiem, gadamy o sobie produkcie, że może byśmy zrobili tak i wtedy agent szybko tworzy ten produkt i spinupuje, wiesz, hor-
+[10:07] You: Agent szybko tworzy ten produkt i spinupuje, wiesz, hordę agentów, które próbują to wypróbować i masz dystrybucję tego, jak agenci o tym pomyśleli, która jakby teoretycznie mimikuje człowieka A, to były wszystkie te projekty z tymi takimi, z tą symulacją takich cywilizacji. Tak, tak, tak. I taki szybki user testing po prostu, że-
+[10:22] You: User testing po prostu, że masz mega szybką walidację. No bo jest ten problem, że jak vibe kodujesz sobie rzeczy, to żeby zwalidować z userem potrzebujesz mega dużo czasu. No. A tak jakby ten, ta pętla iteracji mogłaby się jeszcze bardziej zmniejszyć. Pytanie czy- Pytanie, czy technologia jest na to gotowa, ale jestem w stanie, wiesz, bo to jest tak, tak jak mówił ten gość, no trochę-
+[10:37] You: Jestem w stanie, wiesz, bo to jest tak, tak jak mówił ten gość na Talk Like a Pirate co rok temu, że my robiliśmy technologię za sześć miesięcy, a nie tą teraz. No. Że projektujesz na technologię, która przyjdzie, a nie na tą, która jest. No właśnie. Co by mogło być, wiesz, takim- To mogłoby być fun. Tak. Mega szybki user testing po prostu, yy, ro-ro-rozwiązania. Okej, ale jak to widzę, jak to odemuiesz? Że-- bo to by było działało na gotowym produkcie, czy bardziej rozmawiamy o-
+[10:56] You: produkcie, czy bardziej rozmawiamy ooo czymś nowym zupełnie? W sensie by mogło być jakby na, nawet na, na gotowym produkcie. W sensie takie mega szybkie A/B testy. Wiesz, optymalizacja revenue na przykład u albo— w sensie nawet to by mogło być na produkcyjnym produkcie
+[11:08] You: U albo-- w sensie nawet to by mógł być na produkcyjnym produkcie, yy, że agent mega ro-- szybko robi A/B testy, puszcza hordę agentów, które się przy-przepierdala przez to, wiesz, w dwadzieścia sekund i pokazuje ci, że hej, to może zwiększyć ci revenue o sto procent.
+[11:23] You: Teoretycznie. Okej
+[11:23] You: Teoretycznie Okej
+[11:27] You: No i tak ludzie testują agentami, co nie? Tylko- No. To czemu nie testować Fordem agenta? No właśnie to nie jest jakby impressive, co nie? No bo- Okej ... bo wydaje mi się, że nie wiem, jak ja sobie puszczę dwóch agentów, którzy mi testują dziesięć minut, no to
+[11:38] You: agentów, którzy mi testują dziesięć minut, no to mogę se też-- jakby nie potrzebuję produktu do tego ani nikt nie skoczy, że ktoś ma produkt, który przetestuje mu dwudziestoma agentami w dziesięć sekund, co nie?
+[11:51] You: Że jakby- Tylko że ty testujesz w poszukiwaniu bugów, a Bartek testuje w poszukiwaniu add-onów
+[11:54] You: A Bartek testuje w poszukiwaniu Eda Value Value. Okej Czyli to takie inne, że jakby oni są- No ja, ja rozumiem, rozumiem o co chodzi No pytanie, czy to co- Tylko pytanie, czy jakby chodzi, chodzi mi o to, że to no nie jest impressive, co nie? Mhm. Zrzu-zrzucili sobie dwadzieścia, dwudziestu agentów, co nie? No czaj, w skrawanie liczb- No chyba że się to jakoś fajnie pokaże, że co nie?
+[12:09] You: No czaję, skrawanie liczb Jeżeli się okaże, że to jakoś fajnie pokażesz, co nie? Jak masz jakiś pomysł, żeby to fajnie, wiesz, żeby to złapało po prostu, co nie? Przetestowanie, a pek ludzi na hackathonie [śmiech] i powiedzenie, które jest najlepsze. Wybranie za komisję. Wybranie za komisję.
+[12:27] You: Przetestowanie ich hordami. Śmieszne nawet. No
+[12:27] You: Przetestowanie ich hordami To śmieszne nawet. No W sumie To by było śmieszne Mówisz, że my na naszą sprawdzili na koniec Tak, tak, tak. I sprawdzą, czy się wyniki zgadzają. Tak, tak, tak. No, no, no. Na-nasza horda już przeszła po wszystkich rozwiązaniach i przetestowała waszą aplikację. I to jest to, co myśli. [śmiech]
+[12:41] You: I to jest to, co myśli.
+[12:45] You: Czyli może sobie użyć do oceniania
+[12:49] You: Gadałem z organizatorami No I maksymalnie jednominutowe demo Okej Można zrobić. W ogóle proponowali, żeby ktoś od początku kleił demo, a reszta niech-
+[12:54] You: Proponowali, żeby ktoś od początku kleił demo, a reszta niech robi rozwiązanie No wiadomo, my- Tak, tak. Ten, ee,
+[13:02] You: aha i powiedzieli, że najważniejsze jest dla nich, żeby, żeby to rozwiązywało jakiś problem użytkownika, żeby użytkownik i
+[13:07] You: Użytkownika, żeby użytkownik i wszystkie projekty nie, nie że musi być wow, tylko oni mają kryteria punktowe i wypełniają te kryteria punktowe i każde kryteria mają po pięć punktów. Na pewno. Nie wiem czy przejdę na tego. Ta, ta, ta. Dokładnie. Więc- Working prototype, technical complexity, depth of grokbox, SpaceX app API
+[13:22] You: Complexity, depth of Grokbox, SpaceX app API use O yeah Tools and collaborative workflows dalej jest po przecinku, więc obstawiam, że to nie jest takie ważne. Zwłaszcza, że powiedział, że to nie jest jakieś master Więc jak zrobimy sobie zajebiście technicznego, no to po prostu stracimy na, na creativity albo reward impact, nie? No, no, no reward impact
+[13:37] You: Reward Impact, nie? No, no, no. Reward Impact Zastanówmy się, jaki problem ma dzisiaj Cold Stack i jak rozwiążemy problem Cold Stacka, to zostaniemy ten A ktoś z Cold Stacka? Jedna osoba na pewno. Może dwie max. No jesteśmy bliżej Cold Stacka, więc No tak, a kolejne dwie osoby z Żyli to są nasi koledzy z pracy
+[13:54] You: Jeżeli to są nasi koledzy z pracy.
+[13:58] You: Więc jest pół na pół. [śmiech] Tak. No dobra, no to faktycznie. No.
+[14:07] You: Nic nie wiem, czy my się skupiamy na Kostaku? No wracając do mojego pytania. Tak, tak, tak
+[14:08] You: Się skupię na Cold Stack No wracając do mojego pytania Tak, tak, tak Exploitujemy dalej ten pomysł? Dalej exploitujemy Możemy exploitować dalej. Tablica pomysłów? O to nam chodzi? Czy- W sensie te-te-teraz, yy- Staliśmy na tym, że możesz sobie jak gadamy o jakichś pomysłach produktowych, to nie dość, że spin-upujesz sobie-
+[14:22] You: pomysłach produktowych, to nie dość, że spinupujesz sobie prototyp tego, to jeszcze zapodajesz hordę na to agentów, która jakby- Imituje użytkowników Imituje użytkowników I jakby wiesz, w dziesięć sekund sprawdza ci, jakby waliduje ci ten pomysł zamiast czekać na użytkowników tydzień.
+[14:39] You: Nie wiemy, czy strona jest na gotowa, ale projektujemy na przyszłość. A jakbyśmy sprawdzali po prostu, czy strona-
+[14:42] You: A jakbyśmy sprawdzali po prostu, czy strona konwertuje? No właśnie coś w tym stylu nawet. Skupmy się na najmniejszych wtedy, na przykład na stronach B2B, nie? No na przykład. Czy strona konwertuje po prostu. No można właśnie odpalić agenta debila, który spróbuje się skonwertować jak najszybciej. Drzewa. W sensie do takich rzeczy można nawet drzewa użyć
+[14:56] You: Drzewa. W sensie do takich rzeczy można nawet drzewa użyć, bo on jest trochę taki, wiesz Kurwa, ja zawsze jestem taki sceptyczny co do takich rzeczy, typu że agent mi powie jak prawdziwy człowiek by- No tak, no właśnie. No ale, mm, no ale są, są pewne-- musielibyśmy znaleźć database. U! Wiesz- Jakoś
+[15:10] You: Musielibyśmy znaleźć database. Tak, jest jeszcze- Wizjoner się obudził. Słuchamy Bo przy-przypomniało mi się jak je-jeden framework do właśnie testowania end-to-end działa, że oni, yy, replayują twój, yy, prawdziwy traffic na nowej-
+[15:22] You: Playują twój, yy, prawdziwy traffic na nowych wersjach i go adjustują, yy, pod nowy komponent i sprawdzają, czy userzy wtedy by przeszli swoje flow. Czaisz o co chodzi? Mhm. Że jakby twoimi test case'ami są jakby sesje prawdziwych użytkowników na stronie, które są potem testowane na nowej stronie. Ja jestem przekonany na sto procent
+[15:39] You: Które są potem testowane na nowej stronie Nie wiem, jak to przekłada na to, o czym ty mówisz Yy, że można teoretycznie, jeślibyś miał już produkt, który ktoś tam używał, to możesz teoretycznie, wiesz, jakoś to wziąć i przetestować, jak jego flow by wyglądało na nowej wersji. I wtedy-
+[15:52] You: Jakie jego flow by wyglądało na nowej wersji? I wtedy jesteś bliżej użytkownika Okej, a to nie, to, to co ty opisujesz, to kopia tego, co istnieje, tak? To jest kopia tego frameworku do testowania To, to jest wiesz, po prostu do testowania end to end błędów, szukania błędów. My mieliśmy test-testy do konwersji, bo jakby wiesz, jakby teoretycznie jeśli nie zmieniałeś nic-
+[16:07] You: Jakby wiesz, jakby teoretycznie jeśli nie zmieniałeś nic na stepach jeden, dwa, trzy, no to użytkownik przejdzie tak samo i masz step czwarty i tam może już LLM się wkroczyć, który ma cały kontekst tego, co użytkownik zrobił wcześniej i może rozumieć jego intencje lepiej.
+[16:21] You: Nie wiem, czy czaisz, czy nie. No czaję, czaję, czaję. Tylko to, to jeszcze nie byłoby-- kurwa, jak, jak
+[16:24] You: Nie byłoby... Kurwa, jak, jak? Czy to jest realne, co nie? No. Czy technologia jest gotowa? No to jakby- Bo myślę sobie na przykład o takim workflow'ach u nas w TechLidze, nie? No. Że jakiś tam mamy nagrania z onboardingu- No. No i widzimy, że gościu na jakimś stepie, nie wiem, chwilę czekał i wyszedł. Jakby-
+[16:39] You: Nie wiem, chwilę czekał i wyszedł. Jakby my się potem myślimy jak LLM i się zastanawiam, co LLM by sobie pomyślał, że tam coś było nie tak. [śmiech] Że LLM sobie pomyśli, że nie wiem, że on coś czytał długo na przykład. Na przykład. Że ci skróciłeś copy. Nie wiem. Wiesz, o co chodzi? Jakby- No, no, no czaję, czaję
+[16:53] You: Czaję, czaję.
+[16:59] You: No bo ostatnio, w sensie jak byliśmy na Yeti Careersach, to wygrał gość, który po prostu robił analizę wideo, yy, do playtestów gier. A no, no pamiętam, pamiętam. Więc to jest trochę podobne, tylko nie-
+[17:07] You: No, no, no. Więc to jest trochę podobne. Tylko nie a-na-nie analizujemy wideo, tylko jakby sesje użytkowników i jakby szukamy jakby edge'ów tutaj. Jak zwiększyć pieniążki. Pytanie, czy to ma jakieś value? Jakby wiesz, mega szybkie testowanie hipotez.
+[17:26] You: Okej.
+[17:26] You: Oj
+[17:29] You: A zostając, cofnąć się jeszcze- Tak ... Cofnij się jeszcze do testowania hipotez. Tylko nie-
+[17:36] You: Nie wrzucaj scenariuszem, a? Nie, nie, nie. Może być tylko
+[17:38] You: Może być tylko
+[17:43] You: nie w tym, yy, kontekście konwersji Mhm. Stworzenie hipotez. Okej
+[17:54] You: [tłum w tle]
+[18:16] You: Wiecie jaki jest ciekawy problem do rozwiązania? Slopowe grafiki. Mhm. To jest akurat real shit. Mhm. Jakbyśmy zrobili i ja-- jak
+[18:23] You: Mhm Jakbyśmy zrobili i ja-- jak-- dlaczego robią się slope'owe grafiki robi się wtedy, kiedy ktoś mówi: „Zrób mi grafikę”. A jak się połączy slope'ową grafi-- yy, połączy się „zrób mi grafikę” z dowolnym zdjęciem na Pintereście, nagle się okazuje, że jest całkiem ładna grafika albo całkiem ładny UX. No właśnie
+[18:37] You: To jest całkiem ładna grafika albo całkiem ładny UX No, jak się daje inspo dla agenta, to zawsze wychodzi ładnie Dokładnie. No to, mm, jakbyśmy zrobili
+[18:46] You: jakiś workflow, które po prostu ktoś na przykład zrobi grafikę i on przeczyta Pinteresta, znajdzie coś podobnego do tego, co on opisał i zrobi na podstawie tego Pinteresta. To jest ultra proste, ale no, ee-
+[18:56] You: Ultra proste, ale no, ee, znaczy pytanie, czy to było ultra proste Znaczy jest to ultra proste, bo my tak robimy dzisiaj z designami No tak, ale chodzi o to, żeby zrobić produkt do, wiesz, Grażyny, co ma sklepik, nie? Albo do gościa z res-
+[19:07] You: Bo wiesz, Grażyny co ma sklepik, nie? Albo do gościa z restauracji, żeby mi nie wrzucał kurwa tych grafik z tym jedzeniem po prostu obrz-obrzydliwym, nie? Wiecie, o co chodzi. No to, to jest mam wrażenieee, wiesz, rozwiązanie pro-problemu na teraz. Jakby wyjdzie kolejny model i tego problemu już nie masz. On zrobi ci zajebiste grafiki. Myślisz? No tak. Tak.
+[19:24] You: Robisz zajebiste grafiki Myślisz? No tak Tak. Jakby zawsze ta- No dobra, to, yy, end-to-end też, yy, pewnie mogłoby być rozwiązane w kolejnym modelu, ale wiesz, zrobili coś- A nie, nie, nie, bo ty mówisz, jakby teraz model produ-, teraz model produkuje chujowe grafiki, więc zróbmy wokół niego naszą wiedzę ekspercką, która spowoduje, że będzie robił dobre
+[19:41] You: wokół niego naszą wiedzę ekspercką, która spowoduje, że będzie robił dobre. Teraz każda wiedza ekspercka endgame'owo będzie zastąpiona przez teraz wygenerowany model.
+[19:53] You: Kurde, nie chodzi mi o wiedzę ekspercką, tylko zróbmy workflow, że— no tak jak Lovable zrobiło
+[19:55] You: My workflowze, no tak jak Lovable zrobiło. Co, co, co oni zrobili? Jak ktoś wchodził na czata z GPT i mówił: „Zrób mi stronę”, była chujowe. Jak wejdziesz na Lovable i powiesz: „Zrób mi stronę”, robi się spoko Hostuje się automatycznie, dobra
+[20:07] You: Spoko Hostuje się automatycznie, pewnie No hostuje się automatycznie i jest lepsza niż jakbyś wpisał tego samego prompta do Chata, bo tam mają już ten- No może już teraz bym się nie zgodził z tobą No teraz nie, ale wtedy tak Wtedy tak, bo wtedy agenty, wtedy LLM-y były za słabe. Musieli zrobić harness Tak, ale potem się usuwa harness, bo agenci są już dobrzy
+[20:25] You: Ale potem się usuwa hardness, bo agenci są już dobrzy. To ma nawet, to ma nawet nazwę bitter lesson
+[20:32] You: Bo jest normalnie, to nie jest coś, co ja tam wyvajbowałem swojego, tylko dosłownie tak działa teraz świat. No, no
+[20:37] You: No, no,
+[20:40] You: no. Tylko jak dzisiaj modele są za słabe do generowania grafik, no to rozwiążemy dzisiejszy problem i musimy się zastanawiać, czy za pół roku- To jest dobry produkt wtedy, co nie? Czy za pół roku ktoś-- no ale widzisz, no Lovable, co już powiedzieć, że to jest słaby produkt, bo-
+[20:52] You: Ale co, mi powiedzieć, że to jest słaby produkt, bo- Ale oni, wiesz, zrobili przede wszystkim harness, że gość nie musi kodować. W sensie nie musi kupować sobie edytora, żeby zrobić stronkę. No tak. Przez, przez Chata nie można było deployować stronek do- Też to friction było dużo większe niż, niż w tym Genu. To jest to, co jakby zrobili
+[21:09] You: Zrobili.
+[21:12] You: A wr-wracając do tych meetingów, yy, eksplorowanie tez. No. No to jest trochę ten problem researchu też, o którym mówiłeś. O, no, no że ciężko, żeby agenty wyszły z lokalnego minimum. Yy, no tylko wtedy musielibyśmy to zrobić tak stricte
+[21:25] You: No tylko wtedy musielibyśmy to zrobić tak stricte. Jakie tam by były funky feature'y, które by sprawiały, że to jest sexy? No dobre pytanie. Bo chodzi-chodziło o to, że agenci zbiegają do minimum lokalnego, czy po prostu nie eksplorują dosadnie- Pójdę pić wodę
+[21:39] You: Nie eksplorują w dostatecznym stopniu. Jak się wysilczułeś z agentami, to ci nie da wystarczającej liczby testów z siebie, bo wiesz, wymyśl mi-- a co to będzie? Zastanawiamy się co robić jeszcze, ale troszkę czasu już minęło. No trochę minęło
+[21:52] You: Co robić jeszcze? Ale jest troszkę czasu już minęło. No trochę minęło. Ale dajemy trzydzieści trzy procent czasu na one shota tego i resztę będziemy dyskutować, bo- Ja też nagrywam takie trzygodzinne rzeczy. Ja nagrywam prompta pół godziny yyy na voice nocie, a potem- To wyłączymy thinking w Agencie, żeby szybciej minęło. [śmiech] Dobra, to jak jeszcze myślicie to...
+[22:11] You: [śmiech] Dobra, to jak jeszcze myślicie to, to nie przeszkadzamy. Dzięki.
+[22:18] You: A jak, jak walidować pomysł dzisiaj? Pytanie na przykład powiedzmy, że walidacją by było kupno. Kupno bierze się z reklam. Czyli jak zrobilibyśmy-
+[22:25] You: To bierze się z reklam, czyli jak zrobilibyśmy coś, co, ee, na przykład coś, co wchodzi do meta adsów- No ... powiedzmy i na przykład okazuje się, że po naszym workflow
+[22:38] You: Na przykład okazuje się, że po naszym workflow wrzucenie, yy, kurde, nie, ale Wiem, że lubisz. Napij mnie, napij mnie. Słuchajcie, co to było? Co to było? No tak, no kurde. No widzisz, to są-- słyszysz.
+[22:55] You: Dawaj, uderzaj mnie dalej tym.
+[22:56] You: Dawaj, uderzaj, nie dawaj tym
+[22:58] You: No że tak jakby end golem czy pomysł jest dobry, czy nie, to jest to, czy ktoś jest w stanie za to zapłacić. Żeby sprawdzić, czy ktoś jest w stanie- No zależy w jakiej dziedzinie. No powiedzmy tak, no Żeby sprawdzić, no w biznesie, żeby sprawdzić, czy ktoś chce zapłacić, trzeba wypuścić adse. Yy,
+[23:12] You: Więc
+[23:12] You: więc
+[23:17] You: Testowanie konwersji adsów [śmiech] przez agenty Wszystko się kończy na jednak na- Tak. Czy, czy agent- Na PayDay'cie ... czy agent poda blika na koniec
+[23:23] You: To podej-- czy agent podoblika na koniec. Tak.
+[23:28] You: Nie no, ale zrobienie
+[23:31] You: ogólnie zro-- właśnie to jest też ten, że, że na przykład e-agent ci sam sprzedaż zrobi. No to jest-
+[23:40] You: Że co? To jest ciekawe. No że mówisz agentowi: „zarób mi tysiąc złoty” i ci zarabia, nie?
+[23:41] You: Mówisz agentowi: zarób mi tysiąc złoty i ci zarabia. Po prostu, kurwa, wpada Ogarnia. Money printing Wydaje mi się, że tylko na kursach tak mówią Nie no, ale znaczy no Prędzej czy później tak będzie przez chwilę Bez wątpienia. Przez chwilę będzie. Znaczy myślę, że już dzisiaj jest
+[23:56] You: Przez chwilę będzie. Znaczy myślę, że już dzisiaj jest. Dzisiaj jest, ale jest na etapie, który dokładnie jest-- nie jest jak to-- aż tak zautomatyzowane, myślę, nie.
+[24:07] You: No niektórzy specjalnie budują firmy i w środku używają agentów. Na przykład robią software, rekrutację
+[24:11] You: Na przykład robią software, rekrutację i w ten sposób zarabiają
+[24:16] You: Skąd? Nie, nie znam takich firm.
+[24:20] You: Nie ma takich firm No tak myślałem
+[24:26] You: A
+[24:26] You: Tam jest podział
+[24:30] You: wiesz jaki to ma problem? Tak jak tool'e do tradowania, że jak już zrobisz coś, co działa i to udostępnisz wszystkim, no to nagle to przestaje działać, bo wszyscy to mają. No tak. Musisz trzymać edge zawsze. No.
+[24:39] You: Musisz trzymać edge zawsze
+[24:41] You: Kurde, walidacja pomysłu to jest zawsze wyjście do klientów i ty musisz pójść do klienta
+[24:48] You: i w ogóle sprawdzić, czy to jest na-- czy to jest jego bóle. No. Tylko to jest czasochłonne i drogie. Walidowanie
+[24:53] You: Drogie walidowanie. To jest to Nie, to jedyne co jestem w stanie sobie wyobrazić, jak może-- mógłby agent walidować pomysły to, że, nie wiem, pisałby sam post na Reddicie i sprawdzał, czy one uderzają w jakiś ból i czy ludzi temat grzeje albo na X-ie, albo na Facebooku- Mhm ... czy coś takiego, nie? Mhm
+[25:10] You: Facebooku czy coś takiego, nie?
+[25:15] You: No tylko to jest tak, wiecie Stopowanie Internetu. No. Martwy Internet.
+[25:20] You: Agenty by odpisywały. No. To nie jest dla mnie rozwiązanie, które to naprawia. [śmiech] Właśnie zrobiłem. Zobacz.
+[25:27] You: Właśnie zrobiłem. Zobacz.
+[25:42] You: Jest źle, jest bardzo źle.
+[25:42] You: Wystrzelałem się z pomysłów
+[25:46] You: Spoko.
+[25:57] You: Hmm.
+[26:04] You: Spytajmy GrokBot-a co myśli. Tu wam wszystko działa, nie trzeba pomóc? To widzicie. Dzięki Kornel za test. Zrobione jest elegancko. Elegancko
+[26:10] You: Zorganizowane jest elegancko Elegancko
+[26:13] You: A ty miałeś solo kurwa być. Czapkę dostałeś A widzisz? Dostał czapkę i od razu każdy przyszedł
+[26:25] You: Hmm. No ja miałem coś z vibe'ową może już jako takie demko. Ja już mam apkę do nagrywania, więc dzisiaj jak gadaliśmy to bym zrobił.
+[26:33] You: To jeszcze raz co? A, że to do tego, tak? Tak, tak. Chcesz zobaczyć po prostu feeling tego jak to brzmi? Tak, tak, tak. Zo-zo-zobaczę. Chcę sobie potestować po prostu jak to będzie działało
+[26:39] You: Z-zobaczę. Chcę sobie potestować po prostu jak to będzie działało i nie wiem, pod-podpiąć pod jakiegoś Cer-Cerberasa czy tam jakiegoś Groka, żeby zapierdalał Okej, czyli mówimy to, że
+[26:51] You: jak jest, jak jest user flow, że my eksplorujemy jakąś-- eksplorujemy
+[26:52] You: Jak jest user flow, że my eksponujemy jakąś, eksponujemy jakieś pomysły z Sugeny, tak? Tak, tak, tak. Nawet wiesz, mogę mu ten transcript jakby podać nasz, co teraz gadamy. Ale ten z początku, ten z końca? Cały. Cały transcript. Czyli niech najebie w chuj pomysłów nam po prostu. Tak, tak, tak. Niech po prostu z-zrobi transcript i jakby wiesz, zweryfikuje jego- Nie zamokuje wszystkie, yy

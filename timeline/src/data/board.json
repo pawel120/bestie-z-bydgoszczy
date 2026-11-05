@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "title": "Bestie z Bydgoszczy — brainstorm hackathonowy",
+    "source": "Discord voice note · 27 min",
+    "durationSec": 1640,
+    "generatedBy": "offline (bez klucza API)"
+  },
+  "nodes": [
+    {
+      "id": "m-meeting",
+      "type": "mock",
+      "t": 262,
+      "x": 0,
+      "y": 0,
+      "component": "meeting",
+      "version": "v1",
+      "title": "Spotkanie na żywo",
+      "subtitle": "Produkt słucha rozmowy, wyłapuje idee i od razu składa z nich makiety",
+      "ideas": ["i-kapitula", "i-mockup-agent", "i-explore-agent", "i-vote", "i-loop"]
+    },
+    {
+      "id": "b-lovable",
+      "type": "beat",
+      "kind": "kontra",
+      "t": 382,
+      "x": 660,
+      "y": -250,
+      "title": "To nie jest po prostu plugin do Lovable?",
+      "quote": "bo to jest in the end kończymy na tym, że zrobimy Lovablem",
+      "ideas": ["i-lovable-plugin"]
+    },
+    {
+      "id": "m-canvas",
+      "type": "mock",
+      "t": 412,
+      "x": 640,
+      "y": 60,
+      "component": "canvas",
+      "version": "v2",
+      "title": "Kanwa wariantów",
+      "subtitle": "Każda wizja z rozmowy dostaje własną gałąź, zespół porównuje je obok siebie",
+      "ideas": ["i-agents-talk", "i-speakers", "i-mindmap", "i-compare", "i-harness"]
+    },
+    {
+      "id": "b-speed",
+      "type": "beat",
+      "kind": "decyzja",
+      "t": 548,
+      "x": 1320,
+      "y": -250,
+      "title": "Prędkość, nie kompletność",
+      "quote": "jak zostajesz w prędkości, to nadal jesteś apką do eksploracji",
+      "ideas": ["i-speed-choice"]
+    },
+    {
+      "id": "m-validation",
+      "type": "mock",
+      "t": 594,
+      "x": 1300,
+      "y": 60,
+      "component": "validation",
+      "version": "v3",
+      "title": "Walidacja hordą",
+      "subtitle": "Zamiast dowozić produkt — puść na wariant 200 agentów i pokaż rozkład reakcji",
+      "ideas": ["i-spinup", "i-distribution", "i-validation-slow", "i-ab", "i-revenue", "i-10s"]
+    },
+    {
+      "id": "b-value",
+      "type": "beat",
+      "kind": "insight",
+      "t": 711,
+      "x": 1980,
+      "y": -250,
+      "title": "Ty testujesz pod bugi, my pod value",
+      "quote": "ty testujesz w poszukiwaniu bugów, a Bartek testuje w poszukiwaniu value",
+      "ideas": ["i-horde-meh", "i-bugs-vs-value"]
+    },
+    {
+      "id": "m-sessions",
+      "type": "mock",
+      "t": 910,
+      "x": 1960,
+      "y": 60,
+      "component": "sessions",
+      "version": "v4",
+      "title": "Replay prawdziwych sesji",
+      "subtitle": "Test case = nagranie użytkownika; LLM wchodzi dopiero od kroku, który się zmienił",
+      "ideas": ["i-conversion", "i-replay", "i-sessions", "i-llm-step", "i-onboarding", "i-copy"]
+    },
+    {
+      "id": "b-bitter",
+      "type": "beat",
+      "kind": "kontra",
+      "t": 1225,
+      "x": 2640,
+      "y": -250,
+      "title": "Bitter lesson: harness zniknie",
+      "quote": "potem się usuwa harness, bo agenci są już dobrzy",
+      "ideas": ["i-bitter", "i-friction", "i-slop", "i-inspo"]
+    },
+    {
+      "id": "m-results",
+      "type": "mock",
+      "t": 1345,
+      "x": 2620,
+      "y": 60,
+      "component": "results",
+      "version": "v5",
+      "title": "Wyniki kampanii",
+      "subtitle": "Koniec łańcucha: walidacja = kupno, więc liczy się przychód, a nie opinia agenta",
+      "ideas": ["i-ads", "i-meta", "i-agent-ads", "i-earn"]
+    },
+    {
+      "id": "b-final",
+      "type": "beat",
+      "kind": "decyzja",
+      "t": 1611,
+      "x": 3300,
+      "y": 80,
+      "title": "Wrzucamy cały transcript i generujemy z niego makiety",
+      "quote": "mogę mu ten transcript podać… cały transcript",
+      "ideas": ["i-recorder", "i-cerebras", "i-full"]
+    }
+  ],
+  "edges": [
+    { "from": "m-meeting", "to": "m-canvas", "label": "a gdyby rozróżniać mówców?" },
+    { "from": "m-canvas", "to": "b-lovable", "label": "ale to wciąż tylko makiety" },
+    { "from": "b-lovable", "to": "b-speed", "label": "pivot" },
+    { "from": "b-speed", "to": "m-validation", "label": "walidujemy, zamiast dowozić" },
+    { "from": "m-validation", "to": "b-value", "label": "gdzie tu wow?" },
+    { "from": "b-value", "to": "m-sessions", "label": "value na prawdziwych sesjach" },
+    { "from": "m-sessions", "to": "b-bitter", "label": "co zostanie, gdy modele dorosną?" },
+    { "from": "b-bitter", "to": "m-results", "label": "zostaje pomiar pieniędzy" },
+    { "from": "m-results", "to": "b-final", "label": "domykamy pętlę" }
+  ],
+  "ideas": [
+    { "id": "i-kapitula", "t": 247, "label": "Każdy rzuca pomysły niezależnie", "quote": "na kompach każdy z nas rzuca niezależnie pomysły" },
+    { "id": "i-mockup-agent", "t": 262, "label": "Agent robi makietę pomysłu", "quote": "Jak wrzucisz pomysł, to odpala się agent, który ci robi mockup tego" },
+    { "id": "i-explore-agent", "t": 265, "label": "Drugi agent eksploruje pomysł", "quote": "Drugi agent, który robi eksplorację tego pomysłu" },
+    { "id": "i-vote", "t": 272, "label": "Hard stop i głosowanie", "quote": "Potem jest taki hard stop… i robimy takie głosowanko" },
+    { "id": "i-loop", "t": 280, "label": "Makiety jeszcze w trakcie dyskusji", "quote": "my o czymś dyskutujemy tak jak teraz i już byśmy mieli mockupy" },
+
+    { "id": "i-lovable-plugin", "t": 382, "label": "To tylko plugin do Lovable", "quote": "A to nie jest taki plugin do Lovable?" },
+
+    { "id": "i-agents-talk", "t": 398, "label": "Agenci gadają między sobą", "quote": "teoretycznie ci agenci mogą nawet ze sobą się komunikować" },
+    { "id": "i-speakers", "t": 404, "label": "Agent rozróżnia mówców", "quote": "agent rozróżnia spikerów, co nie?" },
+    { "id": "i-mindmap", "t": 412, "label": "Mapa myśli = mapa makiet", "quote": "taka mapa myśli, trochę mapa mockupów od razu podczas rozmowy" },
+    { "id": "i-compare", "t": 420, "label": "Od razu porównanie dwóch wizji", "quote": "ja mówię jakąś swoją wizję, ty mówisz ten i masz od razu porównanie" },
+    { "id": "i-harness", "t": 445, "label": "Harness do nie-slopowych komponentów", "quote": "harness, który szybko robi mockupowe komponenty w nie-sloppy sposób" },
+
+    { "id": "i-speed-choice", "t": 548, "label": "Kompletność to terytorium Lovable", "quote": "z kompletnością się boję konkurować" },
+
+    { "id": "i-spinup", "t": 594, "label": "Agent spinupuje hordę agentów", "quote": "spinupuje hordę agentów, które próbują to wypróbować" },
+    { "id": "i-distribution", "t": 607, "label": "Rozkład opinii mimikuje ludzi", "quote": "masz dystrybucję tego, jak agenci o tym pomyśleli" },
+    { "id": "i-validation-slow", "t": 622, "label": "Walidacja z userem zabiera tydzień", "quote": "żeby zwalidować z userem potrzebujesz mega dużo czasu" },
+    { "id": "i-ab", "t": 656, "label": "A/B testy na produkcyjnym produkcie", "quote": "nawet to by mogło być na produkcyjnym produkcie" },
+    { "id": "i-revenue", "t": 668, "label": "W 20 sekund: +100% revenue", "quote": "pokazuje ci, że hej, to może zwiększyć ci revenue o sto procent" },
+    { "id": "i-10s", "t": 862, "label": "Walidacja w 10 s zamiast tygodnia", "quote": "w dziesięć sekund waliduje ci ten pomysł" },
+
+    { "id": "i-horde-meh", "t": 687, "label": "Dwudziestu agentów to nie wow", "quote": "mogę se też puścić dwóch agentów, którzy mi testują" },
+    { "id": "i-bugs-vs-value", "t": 711, "label": "Bugi kontra value", "quote": "ty testujesz w poszukiwaniu bugów, a Bartek value" },
+
+    { "id": "i-conversion", "t": 882, "label": "Agent próbuje się skonwertować", "quote": "odpalić agenta debila, który spróbuje się skonwertować" },
+    { "id": "i-replay", "t": 910, "label": "Replay prawdziwego ruchu", "quote": "replayują twój prawdziwy traffic na nowych wersjach" },
+    { "id": "i-sessions", "t": 922, "label": "Test case = sesja użytkownika", "quote": "twoimi test case'ami są sesje prawdziwych użytkowników" },
+    { "id": "i-llm-step", "t": 967, "label": "LLM wchodzi od zmienionego kroku", "quote": "masz step czwarty i tam może już LLM się wkroczyć" },
+    { "id": "i-onboarding", "t": 984, "label": "Z onboardingu: czekał i wyszedł", "quote": "gościu na jakimś stepie chwilę czekał i wyszedł" },
+    { "id": "i-copy", "t": 999, "label": "Czytał długo → skróć copy", "quote": "że on coś czytał długo… że skróciłeś copy" },
+
+    { "id": "i-slop", "t": 1096, "label": "Slopowe grafiki to realny problem", "quote": "Wiecie jaki jest ciekawy problem? Slopowe grafiki" },
+    { "id": "i-inspo", "t": 1126, "label": "Agent dobiera inspirację z Pinteresta", "quote": "przeczyta Pinteresta, znajdzie coś podobnego" },
+
+    { "id": "i-bitter", "t": 1225, "label": "Bitter lesson", "quote": "potem się usuwa harness, bo agenci są już dobrzy" },
+    { "id": "i-friction", "t": 1252, "label": "Lovable wygrał frictionem, nie jakością", "quote": "gość nie musi kupować sobie edytora, żeby zrobić stronkę" },
+
+    { "id": "i-ads", "t": 1338, "label": "Walidacja = kupno, kupno = reklamy", "quote": "walidacją by było kupno. Kupno bierze się z reklam" },
+    { "id": "i-meta", "t": 1345, "label": "Wejść w Meta Ads", "quote": "coś, co wchodzi do meta adsów" },
+    { "id": "i-agent-ads", "t": 1397, "label": "Agent testuje konwersję reklam", "quote": "Testowanie konwersji adsów przez agenty" },
+    { "id": "i-earn", "t": 1411, "label": "„Zarób mi tysiąc złotych”", "quote": "mówisz agentowi: zarób mi tysiąc złoty i ci zarabia" },
+
+    { "id": "i-recorder", "t": 1585, "label": "Mam już apkę do nagrywania", "quote": "Ja już mam apkę do nagrywania" },
+    { "id": "i-cerebras", "t": 1599, "label": "Podpiąć Cerebrasa albo Groka", "quote": "podpiąć pod jakiegoś Cerebrasa czy Groka, żeby zapierdalał" },
+    { "id": "i-full", "t": 1611, "label": "Cały transcript jako wejście", "quote": "Cały transcript. Czyli niech najebie w chuj pomysłów" }
+  ]
+}
