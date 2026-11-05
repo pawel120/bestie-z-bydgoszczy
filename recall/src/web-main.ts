@@ -139,47 +139,25 @@ const VIEW_H = 720;
 const liveUrl = (role: string) =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live?role=${role}${config.live ? `&token=${config.live}` : ""}`;
 
-/**
- * The body plus every shadow root (the cards) separately: hosts get a data-sr index, the viewer re-attaches them.
- * Plain innerHTML, so it works in older Chromium builds (the bot's browser) that lack getHTML().
- */
+/** Body with every shadow root (the cards) as declarative shadow DOM, plus the styles added at runtime. */
 function snapshot() {
-  const hosts = [...document.querySelectorAll("*")].filter((el) => el.shadowRoot);
-  hosts.forEach((el, i) => el.setAttribute("data-sr", String(i)));
-  const body = document.body.innerHTML;
-  hosts.forEach((el) => el.removeAttribute("data-sr"));
-  const shadows = hosts.map((el) => el.shadowRoot!.innerHTML);
+  const shadowRoots = [...document.querySelectorAll("*")].flatMap((el) => (el.shadowRoot ? [el.shadowRoot] : []));
   const styles = [...document.head.querySelectorAll("style")].map((s) => s.textContent).join("\n");
-  // The theme follows the bot's (light) system setting: send the resolved colours so viewers look the same.
-  const computed = getComputedStyle(document.documentElement);
-  const theme = Object.fromEntries([...computed].filter((name) => name.startsWith("--")).map((name) => [name, computed.getPropertyValue(name)]));
-  return JSON.stringify({ body, shadows, bodyClass: document.body.className, styles, theme, dark: matchMedia("(prefers-color-scheme: dark)").matches });
+  return JSON.stringify({ body: document.body.getHTML({ shadowRoots }), bodyClass: document.body.className, styles });
 }
 
 function pushLive() {
   let ws: WebSocket | null = null;
   let last = "";
-  const log = (text: string) => ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ log: text }));
-  // The bot's console is invisible otherwise: forward errors and the status line to serve.mjs.
-  addEventListener("error", (e) => log(`error: ${e.message}`));
-  addEventListener("unhandledrejection", (e) => log(`rejection: ${e.reason}`));
   const connect = () => {
     ws = new WebSocket(liveUrl("bot"));
-    ws.onopen = () => log(`połączono · ${navigator.userAgent}`);
     ws.onclose = () => window.setTimeout(connect, 2000);
   };
   connect();
-  let status = "";
   window.setInterval(() => {
     if (ws?.readyState !== WebSocket.OPEN) return;
-    try {
-      const next = snapshot();
-      if (next !== last) ws.send((last = next));
-      const now = document.getElementById("status")?.textContent ?? "";
-      if (now && now !== status) log(`status: ${(status = now)}`);
-    } catch (err) {
-      log(`snapshot: ${err}`);
-    }
+    const next = snapshot();
+    if (next !== last) ws.send((last = next));
   }, 1000);
 }
 
@@ -201,15 +179,10 @@ function viewLive() {
   const connect = () => {
     const ws = new WebSocket(liveUrl("view"));
     ws.onmessage = (e) => {
-      const { body, shadows, bodyClass, styles, theme, dark } = JSON.parse(String(e.data));
-      for (const [name, value] of Object.entries(theme ?? {})) document.documentElement.style.setProperty(name, String(value));
-      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      const { body, bodyClass, styles } = JSON.parse(String(e.data));
       extra.textContent = styles;
       document.body.className = bodyClass;
-      document.body.innerHTML = body;
-      for (const host of document.querySelectorAll<HTMLElement>("[data-sr]")) {
-        (host.shadowRoot ?? host.attachShadow({ mode: "open" })).innerHTML = shadows[Number(host.dataset.sr)] ?? "";
-      }
+      document.body.setHTMLUnsafe(body);
     };
     ws.onclose = () => window.setTimeout(connect, 2000);
   };
