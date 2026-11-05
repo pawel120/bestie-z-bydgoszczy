@@ -15,7 +15,8 @@ agenci:
 
 na koniec masz strony ktore konwertuja jak nie wiadomo co, a produkty były przetestowane na 100 wariantach w 30 minut (podczas standupu).
 
-<img width="2836" height="1608" alt="image" src="https://github.com/user-attachments/assets/9fe81faf-261b-4894-9f55-a84ef0b95744" />
+<img width="1000" height="1740" alt="image" src="https://github.com/user-attachments/assets/c65eb415-2f47-47e7-a5e3-ded379a8060e" />
+
 
 https://github.com/user-attachments/assets/bff82a24-a135-4926-ae22-b9936e2b4e71
 
