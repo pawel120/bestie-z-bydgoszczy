@@ -1,17 +1,6 @@
+import type { BestieApi } from "../preload.js";
+import { Whiteboard } from "./board.mjs";
 import { ScribeSession, type ScribeEvent } from "./scribe.mjs";
-
-interface BestieApi {
-  platform: string;
-  getSettings(): Promise<{ hasApiKey: boolean; language: string }>;
-  setApiKey(key: string): Promise<void>;
-  setLanguage(language: string): Promise<void>;
-  scribeToken(): Promise<string>;
-  startSession(): Promise<string>;
-  appendTranscript(line: string): Promise<void>;
-  appendAudio(chunk: ArrayBuffer): Promise<void>;
-  finishSession(): Promise<string | null>;
-  revealRecordings(): Promise<void>;
-}
 
 declare global {
   interface Window {
@@ -19,8 +8,9 @@ declare global {
   }
 }
 
-type Speaker = "Ja" | "Rozmówcy";
-export interface Segment {
+/** "Ja" (mic) / "Rozmówcy" (system audio) when recording; whatever the file says when replaying a transcript. */
+type Speaker = string;
+interface Segment {
   speaker: Speaker;
   offset: number;
   text: string;
@@ -34,10 +24,12 @@ const timerEl = $("timer");
 const languageSelect = $<HTMLSelectElement>("language");
 const transcriptEl = $("transcript");
 const statusEl = $("status");
-const apiKeyInput = $<HTMLInputElement>("api-key");
 const settingsEl = $<HTMLDetailsElement>("settings");
+const replayButton = $<HTMLButtonElement>("replay");
+const replayInput = $<HTMLInputElement>("replay-file");
+const boardToggle = $<HTMLInputElement>("board-enabled");
 
-let state: "idle" | "starting" | "recording" | "stopping" = "idle";
+let state: "idle" | "starting" | "recording" | "stopping" | "replaying" = "idle";
 let startedAt = 0;
 let timer: number | undefined;
 let audioContext: AudioContext | null = null;
@@ -45,12 +37,8 @@ let streams: MediaStream[] = [];
 let recorder: MediaRecorder | null = null;
 const sessions = new Map<Speaker, ScribeSession>();
 const partials = new Map<Speaker, string>();
-export const segments: Segment[] = [];
-const segmentListeners: ((segment: Segment) => void)[] = [];
-
-export function onSegment(listener: (segment: Segment) => void) {
-  segmentListeners.push(listener);
-}
+const segments: Segment[] = [];
+const board = new Whiteboard(api, $("board"), $("board-status"), (message) => setStatus(message));
 
 function format(seconds: number) {
   const s = Math.floor(seconds);
@@ -65,13 +53,16 @@ function setStatus(message: string | null) {
 
 function setState(next: typeof state) {
   state = next;
-  recordButton.disabled = next === "starting" || next === "stopping";
+  recordButton.disabled = next !== "idle" && next !== "recording";
+  replayButton.disabled = next !== "idle" && next !== "replaying";
+  replayButton.textContent = next === "replaying" ? "Zatrzymaj odtwarzanie" : "Wczytaj transkrypt";
   recordButton.classList.toggle("recording", next === "recording");
   recordButton.querySelector("span")!.textContent = {
     idle: "Nagrywaj",
     starting: "Uruchamiam…",
     recording: "Zatrzymaj",
     stopping: "Zapisuję…",
+    replaying: "Nagrywaj",
   }[next];
   languageSelect.disabled = next !== "idle";
 }
@@ -95,7 +86,7 @@ function renderTranscript() {
 
 function row(speaker: Speaker, offset: number, text: string, partial: boolean) {
   const el = document.createElement("div");
-  el.className = `segment ${speaker === "Ja" ? "me" : "others"}${partial ? " partial" : ""}`;
+  el.className = `segment ${/^(ja|you|me)$/i.test(speaker) ? "me" : "others"}${partial ? " partial" : ""}`;
   const time = document.createElement("time");
   time.textContent = format(offset);
   const who = document.createElement("strong");
@@ -108,8 +99,9 @@ function row(speaker: Speaker, offset: number, text: string, partial: boolean) {
 
 function addSegment(segment: Segment) {
   segments.push(segment);
-  api.appendTranscript(`[${format(segment.offset)}] ${segment.speaker}: ${segment.text}\n`);
-  for (const listener of segmentListeners) listener(segment);
+  const line = `[${format(segment.offset)}] ${segment.speaker}: ${segment.text}`;
+  if (state !== "replaying") api.appendTranscript(line + "\n");
+  board.addLine(line);
 }
 
 function handle(speaker: Speaker, event: ScribeEvent) {
@@ -163,7 +155,7 @@ async function attach(stream: MediaStream, speaker: Speaker, ctx: AudioContext, 
 
 async function start() {
   const settings = await api.getSettings();
-  if (!settings.hasApiKey) {
+  if (!settings.hasElevenLabsKey) {
     settingsEl.open = true;
     setStatus("Wklej klucz API ElevenLabs w ustawieniach.");
     return;
@@ -190,6 +182,7 @@ async function start() {
   }
 
   await api.startSession();
+  board.reset();
   segments.length = 0;
   partials.clear();
   startedAt = Date.now();
@@ -237,6 +230,7 @@ async function stop() {
   }
   partials.clear();
 
+  await board.flush();
   const folder = await api.finishSession();
   setState("idle");
   setStatus(folder ? `Zapisano w ${folder}` : null);
@@ -259,16 +253,88 @@ window.addEventListener("keydown", (e) => {
 
 $("reveal").addEventListener("click", () => api.revealRecordings());
 languageSelect.addEventListener("change", () => api.setLanguage(languageSelect.value));
-$("save-key").addEventListener("click", async () => {
-  await api.setApiKey(apiKeyInput.value.trim());
-  apiKeyInput.value = "";
-  apiKeyInput.placeholder = "Zapisano ✓";
+$("save-keys").addEventListener("click", async () => {
+  for (const name of ["elevenlabs", "groq"] as const) {
+    const input = $<HTMLInputElement>(`key-${name}`);
+    if (input.value.trim()) await api.setApiKey(name, input.value.trim());
+    input.value = "";
+  }
+  await showKeyState();
   settingsEl.open = false;
   setStatus(null);
 });
 
-const settings = await api.getSettings();
-languageSelect.value = settings.language;
-if (settings.hasApiKey) apiKeyInput.placeholder = "Zapisano ✓ (wklej nowy, aby zmienić)";
+async function showKeyState() {
+  const settings = await api.getSettings();
+  languageSelect.value = settings.language;
+  const saved = "Zapisano ✓ (wklej nowy, aby zmienić)";
+  if (settings.hasElevenLabsKey) $<HTMLInputElement>("key-elevenlabs").placeholder = saved;
+  if (settings.hasGroqKey) $<HTMLInputElement>("key-groq").placeholder = saved;
+  boardToggle.checked = board.enabled = settings.hasGroqKey;
+}
+
+boardToggle.addEventListener("change", () => {
+  board.enabled = boardToggle.checked;
+  if (board.enabled) void board.flush();
+});
+$("board-refresh").addEventListener("click", () => void board.flush());
+
+// MARK: - Replay a saved transcript (demo / backtesting without recording)
+
+let replayAbort: AbortController | null = null;
+
+function parseTranscript(text: string): Segment[] {
+  const result: Segment[] = [];
+  let base = 0;
+  let last = 0;
+  for (const raw of text.split("\n")) {
+    const m = raw.match(/^\[(?:(\d+):)?(\d+):(\d+)\]\s*([^:]{1,40}):\s*(.+)$/);
+    if (!m) continue;
+    let offset = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+    // A transcript stitched from several recordings restarts at 00:00.
+    if (offset + base < last - 5) base = last;
+    offset += base;
+    last = offset;
+    result.push({ speaker: m[4].trim(), offset, text: m[5].trim() });
+  }
+  return result;
+}
+
+async function replay(file: File) {
+  const items = parseTranscript(await file.text());
+  if (items.length === 0) return setStatus("Nie znalazłem linii w formacie „[mm:ss] Kto: tekst”.");
+  replayAbort = new AbortController();
+  const { signal } = replayAbort;
+  setState("replaying");
+  setStatus(`Odtwarzam ${file.name} (${items.length} wypowiedzi, przyspieszone)…`);
+  board.reset();
+  segments.length = 0;
+  startedAt = Date.now();
+  let previous = 0;
+  for (const item of items) {
+    if (signal.aborted) break;
+    // ~20× faster than real time, but never more than 1.5 s between lines.
+    await new Promise((r) => setTimeout(r, Math.min(1500, Math.max(150, ((item.offset - previous) * 1000) / 20))));
+    previous = item.offset;
+    timerEl.textContent = format(item.offset);
+    addSegment(item);
+    renderTranscript();
+  }
+  await board.flush();
+  setState("idle");
+  setStatus(signal.aborted ? "Odtwarzanie zatrzymane." : "Odtwarzanie zakończone.");
+}
+
+replayButton.addEventListener("click", () => {
+  if (state === "replaying") replayAbort?.abort();
+  else replayInput.click();
+});
+replayInput.addEventListener("change", () => {
+  const file = replayInput.files?.[0];
+  replayInput.value = "";
+  if (file) replay(file).catch((err) => (setState("idle"), setStatus(String(err))));
+});
+
+await showKeyState();
 setState("idle");
 renderTranscript();

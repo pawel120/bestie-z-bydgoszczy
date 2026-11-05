@@ -1,12 +1,27 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session, shell, systemPreferences } from "electron";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
+import { boardToHtml, updateBoard, type BoardItem } from "./board";
+
+// Dev convenience: load API keys from a gitignored .env next to package.json (packaged builds use Settings).
+if (!app.isPackaged) {
+  try {
+    for (const line of readFileSync(path.join(app.getAppPath(), ".env"), "utf8").split("\n")) {
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+    }
+  } catch {}
+}
 
 const recordingsRoot = () => path.join(app.getPath("documents"), "Bestie");
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 
+type KeyName = "elevenlabs" | "groq";
+const ENV_KEYS: Record<KeyName, string> = { elevenlabs: "ELEVENLABS_API_KEY", groq: "GROQ_API_KEY" };
+
 interface Config {
-  apiKey?: string; // encrypted with safeStorage, base64
+  keys?: Partial<Record<KeyName, string>>; // encrypted with safeStorage, base64
   language?: string;
 }
 
@@ -23,9 +38,10 @@ async function writeConfig(config: Config) {
   await writeFile(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
-async function getApiKey(): Promise<string> {
-  if (process.env.ELEVENLABS_API_KEY) return process.env.ELEVENLABS_API_KEY;
-  const { apiKey } = await readConfig();
+async function getApiKey(name: KeyName): Promise<string> {
+  const fromEnv = process.env[ENV_KEYS[name]];
+  if (fromEnv) return fromEnv;
+  const apiKey = (await readConfig()).keys?.[name];
   if (!apiKey) return "";
   try {
     return safeStorage.decryptString(Buffer.from(apiKey, "base64"));
@@ -36,6 +52,7 @@ async function getApiKey(): Promise<string> {
 
 let currentFolder: string | null = null;
 let lastFolder: string | null = null;
+let currentTitle = "";
 
 function timestamp() {
   const d = new Date();
@@ -46,12 +63,16 @@ function timestamp() {
 function registerIpc() {
   ipcMain.handle("settings:get", async () => {
     const config = await readConfig();
-    return { hasApiKey: (await getApiKey()) !== "", language: config.language ?? "auto" };
+    return {
+      hasElevenLabsKey: (await getApiKey("elevenlabs")) !== "",
+      hasGroqKey: (await getApiKey("groq")) !== "",
+      language: config.language ?? "auto",
+    };
   });
 
-  ipcMain.handle("settings:set-api-key", async (_e, key: string) => {
+  ipcMain.handle("settings:set-api-key", async (_e, name: KeyName, key: string) => {
     const config = await readConfig();
-    config.apiKey = key ? safeStorage.encryptString(key).toString("base64") : undefined;
+    config.keys = { ...config.keys, [name]: key ? safeStorage.encryptString(key).toString("base64") : undefined };
     await writeConfig(config);
   });
 
@@ -61,7 +82,7 @@ function registerIpc() {
 
   // The renderer's WebSocket can't send the xi-api-key header, so it connects with a single-use token instead.
   ipcMain.handle("scribe:token", async () => {
-    const apiKey = await getApiKey();
+    const apiKey = await getApiKey("elevenlabs");
     if (!apiKey) throw new Error("Brak klucza API ElevenLabs.");
     const res = await fetch("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe", {
       method: "POST",
@@ -74,6 +95,7 @@ function registerIpc() {
 
   ipcMain.handle("session:start", async () => {
     const stamp = timestamp();
+    currentTitle = `Spotkanie ${stamp}`;
     currentFolder = path.join(recordingsRoot(), stamp);
     await mkdir(currentFolder, { recursive: true });
     await writeFile(path.join(currentFolder, "transkrypcja.md"), `# Spotkanie ${stamp}\n\n`);
@@ -86,6 +108,18 @@ function registerIpc() {
 
   ipcMain.handle("session:audio", async (_e, chunk: ArrayBuffer) => {
     if (currentFolder) await appendFile(path.join(currentFolder, "spotkanie.webm"), Buffer.from(chunk));
+  });
+
+  ipcMain.handle("board:update", async (_e, transcript: string, board: BoardItem[]) => {
+    const apiKey = await getApiKey("groq");
+    if (!apiKey) throw new Error("Brak klucza API Groq — tablica wyłączona.");
+    return updateBoard(apiKey, transcript, board);
+  });
+
+  ipcMain.handle("board:save", async (_e, board: BoardItem[]) => {
+    if (!currentFolder) return;
+    await writeFile(path.join(currentFolder, "tablica.json"), JSON.stringify(board, null, 2));
+    await writeFile(path.join(currentFolder, "tablica.html"), boardToHtml(currentTitle, board));
   });
 
   ipcMain.handle("session:finish", () => {
@@ -103,9 +137,9 @@ function registerIpc() {
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 760,
-    height: 620,
-    minWidth: 520,
+    width: 1360,
+    height: 820,
+    minWidth: 820,
     minHeight: 420,
     title: "Bestie",
     webPreferences: { preload: path.join(__dirname, "preload.js") },
