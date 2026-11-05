@@ -21,17 +21,18 @@ export class LLM {
   }
 
   // final: jedno podsumowanie analityka na koniec przebiegu, wykonywane zawsze, nawet po wyczerpaniu limitu.
-  async json(system, user, { maxTokens = 300, temperature = 0.8, final = false } = {}) {
+  // models: nadpisanie listy modeli dla jednego wywołania (np. tani model do cytatu z ankiety wyjścia).
+  async json(system, user, { maxTokens = 300, temperature = 0.8, final = false, models = null } = {}) {
     if (!final && this.overBudget) throw new Error('BUDGET');
     this.inFlight++;
-    try { return await this.#json(system, user, maxTokens, temperature); }
+    try { return await this.#json(system, user, maxTokens, temperature, models); }
     finally { this.inFlight--; }
   }
 
-  async #json(system, user, maxTokens, temperature) {
+  async #json(system, user, maxTokens, temperature, override) {
     const body = () => ({
-      model: this.models[0],
-      models: this.models.slice(0, 3),
+      model: (override || this.models)[0],
+      models: (override || this.models).slice(0, 3),
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
       max_tokens: maxTokens,
       temperature,
@@ -59,7 +60,7 @@ export class LLM {
           if (res.status === 402) throw Object.assign(new Error('Brak środków na OpenRouter (402)'), { fatal: true });
           if (res.status === 401) throw Object.assign(new Error('Zły klucz OpenRouter (401)'), { fatal: true });
           // Model, który odrzuca żądanie (zły id, zły endpoint), wypada z listy na resztę przebiegu.
-          if ([400, 404].includes(res.status) && this.models.length > 1) {
+          if (!override && [400, 404].includes(res.status) && this.models.length > 1) {
             if (this.models[0] === b.model) {
               console.warn(`[llm] ${b.model} odrzucony (${res.status}), przełączam: ${t.slice(0, 160)}`);
               this.models = this.models.slice(1);
