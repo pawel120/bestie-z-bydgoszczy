@@ -4,7 +4,9 @@ import { ScribeSession } from "/scribe.js";
 import { AgentCursors } from "/agents.js";
 
 const $ = (id) => document.getElementById(id);
-const room = new URLSearchParams(location.search).get("room") || "";
+const params = new URLSearchParams(location.search);
+const room = params.get("room") || "";
+const isBot = params.get("bot") === "1"; // Recall's bot: no one to click, and getUserMedia is the meeting's audio
 
 const showOffline = (offline) => { $("offline").hidden = !offline; };
 
@@ -43,6 +45,7 @@ function connect() {
       joined = true;
       $("join").hidden = true;
       $("app").hidden = false;
+      if (isBot) startScribe().catch((err) => micState(false, err.message));
     }
     handle(JSON.parse(e.data));
   };
@@ -65,7 +68,11 @@ function handle(event) {
       event.cards.forEach(drawCard);
       setPeople(event.people);
       showBrain(event.budget);
+      showVideo(event.video);
       if (event.cards.length) fit();
+      break;
+    case "video":
+      showVideo(event.video);
       break;
     case "brain":
       showBrain(event);
@@ -194,8 +201,9 @@ async function scribeToken() {
 
 async function startScribe() {
   let first = await scribeToken(); // fails here, before asking for the mic, when the room has no key
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: !isBot, noiseSuppression: !isBot, autoGainControl: !isBot } });
   const ctx = new AudioContext({ sampleRate: 48_000 });
+  if (isBot) await ctx.resume();
   await ctx.audioWorklet.addModule("/pcm-worklet.js");
   const worklet = new AudioWorkletNode(ctx, "pcm-capture");
   const getToken = async () => {
@@ -276,6 +284,26 @@ $("mic").addEventListener("click", async () => {
     $("mic").disabled = false;
   }
 });
+
+// ---- Video beside the board ----
+let playing = "";
+
+function showVideo(video) {
+  const panel = $("video");
+  if ((video?.id ?? "") === playing) return;
+  playing = video?.id ?? "";
+  panel.hidden = !video;
+  panel.querySelector("iframe")?.remove();
+  if (!video) return;
+  const iframe = document.createElement("iframe");
+  iframe.title = video.title || "Film";
+  iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+  iframe.referrerPolicy = "strict-origin-when-cross-origin"; // YouTube refuses to play without it
+  iframe.src = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&mute=1&loop=1&playlist=${video.id}`;
+  panel.append(iframe);
+}
+
+$("videoClose").addEventListener("click", () => showVideo(null));
 
 // ---- Canvas ----
 const world = $("world");
@@ -465,3 +493,9 @@ $("clear").addEventListener("click", () => {
   if (confirm("Wyczyścić tablicę dla wszystkich? Karty zostaną w archiwum sesji.")) post("/api/clear", {});
 });
 applyView();
+
+if (isBot) {
+  me = "Spotkanie";
+  document.body.classList.add("bot");
+  connect();
+}

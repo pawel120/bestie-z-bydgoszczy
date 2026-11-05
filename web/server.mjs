@@ -53,6 +53,7 @@ const clients = new Set(); // { res, name }
 const waiters = new Set(); // long-polling transcript readers
 
 let budget = { activity: "", spent: 0, limit: BUDGET_USD, stopped: false, error: "" };
+let video = null; // { id, title } of what plays beside the board
 const hasAi = process.env.BRAIN !== "off" && (process.env.ANTHROPIC_API_KEY || process.env.GROQ_API_KEY);
 const brain = hasAi
   ? (await import("./brain.mjs")).createBrain({
@@ -62,6 +63,10 @@ const brain = hasAi
       agent: {
         show: (id, name, target, note) => broadcast({ type: "agent", id, name, target, note }),
         hide: (id) => broadcast({ type: "agent-done", id }),
+      },
+      showVideo: (next) => {
+        video = /^[\w-]{11}$/.test(next?.id ?? "") ? { id: next.id, title: String(next.title ?? "").slice(0, 120) } : null;
+        broadcast({ type: "video", video });
       },
       limitUsd: BUDGET_USD,
       onStatus: (next) => {
@@ -173,7 +178,7 @@ function openEvents(req, res, url) {
   res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive", "X-Accel-Buffering": "no" });
   const client = { res, name: (url.searchParams.get("name") || "").slice(0, 60) };
   clients.add(client);
-  res.write(`data: ${JSON.stringify({ type: "state", lines, cards: [...cards.values()], people: presence(), budget })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: "state", lines, cards: [...cards.values()], people: presence(), budget, video })}\n\n`);
   broadcast({ type: "people", people: presence() });
   const ping = setInterval(() => res.write(": ping\n\n"), 20_000);
   req.on("close", () => {

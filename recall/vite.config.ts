@@ -6,7 +6,8 @@ import { defineConfig, transformWithEsbuild, type Plugin } from "vite";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-const desktop = path.resolve(__dirname, "../src");
+// Vite reports paths with forward slashes on every system, Windows included.
+const desktop = path.resolve(__dirname, "../src").replaceAll("\\", "/");
 const here = (file: string) => path.resolve(__dirname, "src", file);
 
 function desktopApp(): Plugin {
@@ -21,7 +22,7 @@ function desktopApp(): Plugin {
       // Tailwind compiled from a bundled stylesheet instead of node_modules on disk.
       if (source === "./tailwind" && importer?.startsWith(desktop)) return here("tailwind.ts");
       // The bot's hands-free camera wraps the desktop whiteboard (see src/handsfree.ts).
-      if (source === "./board.mjs" && importer?.endsWith(path.join("renderer", "app.mts"))) return here("handsfree.ts");
+      if (source === "./board.mjs" && importer?.endsWith("renderer/app.mts")) return here("handsfree.ts");
       return null;
     },
     transformIndexHtml: {

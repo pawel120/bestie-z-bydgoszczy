@@ -14,6 +14,14 @@ Serwer nasłuchuje tylko na tym komputerze. Żeby wpuścić inne osoby, wystaw g
 
 Limit wydatków (`BUDGET_USD`, domyślnie 5) liczy się od startu serwera, więc restart zeruje licznik. Restart czyści też pokój: transkrypt i karty zostają tylko w plikach sesji.
 
+## Google Meet
+
+Bota wysyła `recall/bot.mjs` (potrzebny `RECALL_API_KEY`). Pokój musi mieć publiczny adres HTTPS przez tunel obsługujący SSE. Końcówka `&x=` jest potrzebna, bo bot dokleja do adresu `/#c=...`:
+
+```bash
+cd recall && npm run bot -- https://meet.google.com/abc-defg-hij --url "https://publiczny-adres/?room=KLUCZ&bot=1&x="
+```
+
 ## Test bez mikrofonu
 
 ```bash

@@ -95,6 +95,13 @@ function addCost(provider: "jev" | "groq" | "claude", usd: number) {
 }
 const GROQ_PRICE = { input: 0.15e-6, output: 0.6e-6 };
 const OPUS_FAST_PRICE = { input: 8e-6, output: 40e-6, cacheRead: 0.4e-6, cacheWrite: 10e-6 };
+/** For Claude calls made outside this file; a web search bills on top of the tokens. */
+export function countClaudeUsage(model: string, usage: Anthropic.Usage) {
+  addClaudeUsage(usage);
+  usageListener(model, usage);
+  addCost("claude", (usage.server_tool_use?.web_search_requests ?? 0) * 0.01);
+}
+
 function addClaudeUsage(usage: {
   input_tokens: number;
   output_tokens: number;

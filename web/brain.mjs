@@ -35,7 +35,7 @@ const CLICKABLE =
   "inputs at the start of <body>, use <label for> as the buttons and links, and show the checked radio's screen with " +
   "a small <style> block. Every primary action must lead somewhere.";
 
-export function createBrain({ lines, cards, saveCard, agent, onStatus, limitUsd }) {
+export function createBrain({ lines, cards, saveCard, agent, showVideo, onStatus, limitUsd }) {
   const keys = { anthropic: process.env.ANTHROPIC_API_KEY ?? "", groq: process.env.GROQ_API_KEY ?? "" };
   const sources = new Map(); // card id -> editable HTML
   const spend = { models: 0, speech: 0 };
@@ -141,7 +141,7 @@ export function createBrain({ lines, cards, saveCard, agent, onStatus, limitUsd 
     const anchor = currentCard();
     const found = await agents.photos({ request, anchor, count: 4 });
     if (!found.length || !anchor || anchor.kind !== "mockup" || !sources.has(anchor.id) || exhausted()) return;
-    const urls = found.slice(0, 2).map((p) => p.url).join("\n");
+    const urls = found.slice(0, 2).map((p) => p.link ?? p.url).join("\n");
     await draw(
       { ...anchor, op: "edit", brief: `${request}\nAdd these real photos to the screen with <img src> and object-cover. This replaces the rule against external images, for exactly these URLs:\n${urls}` },
       lines.map(text).join("\n"),
@@ -208,6 +208,23 @@ export function createBrain({ lines, cards, saveCard, agent, onStatus, limitUsd 
       console.log(`[polecenie] ${action}: ${topic}`);
       if (exhausted() || action === "none") {
         checkedLines = seen;
+        return;
+      }
+      if (action === "stop_video") {
+        checkedLines = plannedLines = seen;
+        showVideo(null);
+        return;
+      }
+      if (action === "video") {
+        checkedLines = plannedLines = seen;
+        agents
+          .video(topic)
+          .then((video) => (video ? showVideo(video) : Promise.reject(new Error(`Nie ma filmu: ${topic}`))))
+          .catch((err) => {
+            console.error(err);
+            lastError = "Nie udało się włączyć filmu.";
+            publish("");
+          });
         return;
       }
       if (action === "research" || action === "photos") {

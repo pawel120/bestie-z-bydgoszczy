@@ -283,6 +283,11 @@ main { flex: 1; min-height: 0; display: flex; }
 }
 
 /* Multiplayer-style agent cursors (constant on-screen size). */
+/* Video beside the board: stays put while the canvas pans and zooms. */
+.board-video { position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 400px; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 12px; background: #000; box-shadow: 0 8px 28px rgba(0, 0, 0, .3); }
+.board-video iframe { display: block; width: 100%; height: 100%; border: 0; }
+.board-video button { position: absolute; top: 6px; right: 6px; z-index: 1; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; color: #fff; background: rgba(0, 0, 0, .65); cursor: pointer; font-size: 16px; line-height: 1; }
+
 .agent-cursor {
   position: absolute; top: 0; left: 0; z-index: 50; pointer-events: none; transform-origin: 0 0;
   transition: transform 1s cubic-bezier(.3, .7, .2, 1), opacity .4s; opacity: 0;

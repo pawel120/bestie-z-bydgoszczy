@@ -5,6 +5,7 @@
 // "system audio" ("Rozmówcy"), the bot's own "microphone" is silence, and recording starts on its own.
 
 import "../../src/renderer/styles.css";
+import { findImages, findVideo, internetIntent, researchWeb } from "../../src/internet";
 import { designCard, gateBoard, planBoard, replicateProduct, resetCosts, watchCosts, type BoardItem, type PlanOp } from "../../src/board";
 import type { BestieApi } from "../../src/preload";
 import { readConfig } from "./config";
@@ -50,6 +51,11 @@ function download(name: string, text: string, type = "text/markdown") {
   a.download = name;
   a.click();
 }
+
+const withClaude = async <T>(run: (apiKey: string) => Promise<T>) => {
+  if (!key("anthropic")) throw new Error("Internet na tablicy wymaga klucza Claude.");
+  return run(key("anthropic"));
+};
 
 const api: BestieApi = {
   platform: "web" as NodeJS.Platform,
@@ -117,6 +123,10 @@ const api: BestieApi = {
     }
   },
   onBoardPartial: (listener) => void partialListeners.push(listener),
+  internetIntent: (earlier, fresh) => withClaude((apiKey) => internetIntent(apiKey, earlier, fresh)),
+  researchWeb: (request, context) => withClaude((apiKey) => researchWeb(apiKey, request, context)),
+  findImages: (request) => withClaude((apiKey) => findImages(apiKey, request)),
+  findVideo: (query) => withClaude((apiKey) => findVideo(apiKey, query)),
   // The base product needs a screenshot of another site, which a web page can't take.
   loadProduct: async () => {
     throw new Error("produkt bazowy działa tylko w aplikacji desktop (potrzebny zrzut strony)");
@@ -127,6 +137,11 @@ const api: BestieApi = {
       ? replicateProduct(key("anthropic"), (html) => productListeners.forEach((l) => l(html)), new AbortController().signal)
       : null,
   onProductPartial: (listener) => void productListeners.push(listener),
+  // Horda runs real browsers, so it stays in the desktop app.
+  runHorda: async () => {
+    throw new Error("Horda działa tylko w aplikacji desktop.");
+  },
+  onHordaEvent: () => {},
   onCosts: (listener) => watchCosts(listener),
   resetCosts: async () => resetCosts(),
   saveBoard: async (items) => void (board = items),
