@@ -65,6 +65,9 @@ interface Card {
   quote: HTMLElement;
   caption: HTMLElement;
   drawing: boolean;
+  createdAt: number;
+  /** Drawings of this card run one after another. */
+  queue: Promise<void>;
 }
 
 interface Lane {
@@ -111,9 +114,7 @@ export class Whiteboard {
   private cards = new Map<string, Card>();
   private lanes = new Map<string, Lane>();
   private lines: string[] = [];
-  private partials = new Map<string, string>();
   private version = 0; // bumps on every transcript change
-  private checkedVersion = 0;
   private plannedLines = 0;
   private busy = false;
   private debounce: number | undefined;
@@ -220,8 +221,7 @@ export class Whiteboard {
     this.lanes.clear();
     this.columns = 0;
     this.lines = [];
-    this.partials.clear();
-    this.version = this.checkedVersion = this.plannedLines = 0;
+    this.version = this.plannedLines = 0;
     this.clearTimers();
     this.ruler.replaceChildren();
     this.links.replaceChildren();
@@ -235,12 +235,11 @@ export class Whiteboard {
     this.changed();
   }
 
-  /** What a speaker is saying right now (null once it is committed). */
-  setPartial(speaker: string, text: string | null) {
-    if (text && text.trim().split(/\s+/).length >= 3) this.partials.set(speaker, text);
-    else this.partials.delete(speaker);
-    this.changed();
-  }
+  /**
+   * Partials are only shown in the transcript: planning on them made the same sentence count twice (once while it
+   * was being said, once when it was committed). The board works on committed lines, each handled exactly once.
+   */
+  setPartial(_speaker: string, _text: string | null) {}
 
   /** Plans right now, skipping the gate (the "refresh" button, end of a recording). */
   async flush() {
@@ -248,7 +247,7 @@ export class Whiteboard {
     await this.step(true);
   }
 
-  // MARK: - Gate → plan → draw
+  // MARK: - Gate → plan → guard → draw
 
   private changed() {
     this.version++;
@@ -264,15 +263,12 @@ export class Whiteboard {
     this.debounce = this.deadline = undefined;
   }
 
-  private live() {
-    return [...this.partials].map(([speaker, text]) => `[teraz] ${speaker}: ${text}…`);
-  }
-
-  /** The last few lines, with the ones the planner has not seen yet marked ">>". */
-  private recent() {
-    const start = Math.max(0, this.lines.length - GATE_LINES);
-    const lines = this.lines.slice(start).map((line, i) => (start + i >= this.plannedLines ? `>> ${line}` : `   ${line}`));
-    return [...lines, ...this.live().map((l) => `>> ${l}`)].join("\n");
+  /** Lines, with the ones not handled yet marked ">>" (the only ones the gate and the planner may react to). */
+  private marked(from = 0) {
+    return this.lines
+      .slice(from)
+      .map((line, i) => (from + i >= this.plannedLines ? `>> ${line}` : `   ${line}`))
+      .join("\n");
   }
 
   private metas() {
@@ -281,38 +277,37 @@ export class Whiteboard {
 
   private async step(force = false) {
     if (this.busy || (!force && !this.enabled)) return;
-    if (!this.lines.length && !this.partials.size) return;
-    if (!force && this.version === this.checkedVersion) return;
+    const upTo = this.lines.length;
+    const fresh = this.lines.slice(this.plannedLines);
+    if (!fresh.length && !(force && upTo)) return;
     this.clearTimers();
     this.busy = true;
-    const version = this.version;
-    const linesSeen = this.lines.length;
     try {
       let hint = "brak klasyfikatora";
-      const fresh = [...this.lines.slice(this.plannedLines), ...this.live()].join(" ");
-      if (!force && DIRECT_REQUEST.test(fresh)) {
+      const ask = DIRECT_REQUEST.test(fresh.join(" "));
+      if (!force && ask) {
         hint = "ask: someone asked the board directly to propose or design something";
         this.lastStep = "Prośba do tablicy";
       } else if (!force) {
         this.setStatus("Słucham…");
-        const gate = await this.api.gateBoard(this.recent(), this.metas());
+        const gate = await this.api.gateBoard(this.marked(Math.max(0, upTo - GATE_LINES)), this.metas());
         if (gate) {
           const lane = gate.thread ? this.lanes.get(gate.thread) : null;
           hint = `${gate.action} (pewność ${Math.round(gate.confidence * 100)}%)${gate.thread ? `, wątek ${gate.thread}` : ""}`;
           this.lastStep = `Jev: ${GATE_LABEL[gate.action] ?? gate.action}${lane ? ` · ${lane.title.textContent}` : ""}`;
           // Only wait when the classifier is quite sure; when in doubt, let the planner decide.
           if (gate.action === "wait" && gate.wait >= 0.7) {
-            this.checkedVersion = version;
+            this.plannedLines = upTo; // small talk is handled too: it must not come back later
             return;
           }
         }
       }
       this.setStatus(`${this.lastStep ? this.lastStep + " · " : ""}planuję…`);
       const started = performance.now();
-      const transcript = [...this.lines, ...this.live()].join("\n");
-      const ops = await this.api.planBoard(transcript, this.metas(), hint);
-      this.checkedVersion = version;
-      this.plannedLines = linesSeen;
+      const transcript = this.marked();
+      // Mark the lines as handled before drawing, even if planning fails: a failed line must not loop forever.
+      this.plannedLines = upTo;
+      const ops = this.guard(await this.api.planBoard(transcript, this.metas(), hint), fresh.length, ask || hint.startsWith("ask"));
       for (const op of ops) this.apply(op, transcript);
       this.lastStep = `${this.lastStep ? this.lastStep + " · " : ""}plan ${((performance.now() - started) / 1000).toFixed(1)} s`;
     } catch (err) {
@@ -321,34 +316,88 @@ export class Whiteboard {
       this.busy = false;
       this.setStatus();
     }
-    // The conversation moved on in the meantime.
-    if (this.version !== this.checkedVersion) this.changed();
+    // More lines arrived while we were busy.
+    if (this.lines.length > this.plannedLines) this.changed();
+  }
+
+  /**
+   * Deterministic guard rails on top of the planner, so the board cannot loop or spam versions whatever the model
+   * returns: one op per thread, no more new cards than new lines (except "give me N ideas"), a quote that is already
+   * on the board becomes an edit of that card, a version that would follow the previous one within 25 s becomes an
+   * edit of it, and versions always continue from the newest card of their thread.
+   */
+  private guard(ops: PlanOp[], newLines: number, ask: boolean): PlanOp[] {
+    const norm = (q: string) => q.toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, " ").replace(/\s+/g, " ").trim();
+    const sameQuote = (a: string, b: string) => {
+      const x = norm(a);
+      const y = norm(b);
+      return x.length >= 8 && y.length >= 8 && (x === y || (Math.min(x.length, y.length) >= 12 && (x.includes(y) || y.includes(x))));
+    };
+    const limit = ask ? 4 : Math.max(1, Math.min(2, newLines));
+    const out: PlanOp[] = [];
+    const threads = new Set<string>();
+    for (const raw of ops) {
+      if (out.length >= limit) break;
+      const op = { ...raw };
+      // A thread the model renamed slightly is still the same thread.
+      if (!this.lanes.has(op.thread)) {
+        const byTitle = [...this.lanes].find(([, lane]) => norm(lane.title.textContent ?? "") === norm(op.threadTitle));
+        if (byTitle) op.thread = byTitle[0];
+      }
+      const duplicate = [...this.cards.values()].find((c) => sameQuote(c.item.quote, op.quote));
+      if (duplicate && op.op !== "edit") {
+        Object.assign(op, { op: "edit", id: this.latestIn(duplicate.item.thread).item.id, thread: duplicate.item.thread });
+      }
+      if (op.op === "edit") {
+        const target = this.cards.get(op.id) ?? this.latestIn(op.thread);
+        if (target) Object.assign(op, { id: target.item.id, thread: target.item.thread });
+        else op.op = "create";
+      }
+      if (op.op === "evolve") {
+        const latest = this.latestIn(op.thread);
+        if (!latest) op.op = "create";
+        else if (Date.now() - latest.createdAt < 25_000) Object.assign(op, { op: "edit", id: latest.item.id });
+        else op.from = latest.item.id;
+      }
+      if (op.op === "create") {
+        op.from = "";
+        if (this.lanes.has(op.thread)) op.thread = this.uniqueId(op.thread, (id) => this.lanes.has(id));
+      }
+      if (op.op !== "edit") op.id = this.uniqueId(op.id || op.thread, (id) => this.cards.has(id));
+      if (threads.has(op.thread)) continue;
+      threads.add(op.thread);
+      out.push(op);
+    }
+    return out;
+  }
+
+  private uniqueId(base: string, taken: (id: string) => boolean) {
+    let id = base || "karta";
+    for (let n = 2; taken(id); n++) id = `${base}-${n}`;
+    return id;
   }
 
   private apply(op: PlanOp, transcript: string) {
-    const existing = this.cards.get(op.id);
     let card: Card;
-    let base = "";
-    if (existing && (op.op === "edit" || existing.item.thread === op.thread)) {
+    if (op.op === "edit") {
       // Small change in place: no new frame, no camera movement.
-      card = existing;
-      base = card.item.source;
+      card = this.cards.get(op.id)!;
       Object.assign(card.item, { title: op.title, summary: op.summary, kind: op.kind, quote: op.quote, at: op.at });
       this.fillLabels(card);
       this.flash(card, "edytowano");
     } else {
       const lane = this.lane(op.thread, op.threadTitle);
-      const from = this.cards.get(op.from) ?? (op.op === "evolve" ? this.latestIn(op.thread) : undefined);
-      base = op.op === "create" ? "" : from?.item.source ?? "";
+      const from = op.op === "evolve" ? this.cards.get(op.from) : undefined;
       card = this.createCard(
-        { id: op.id, thread: op.thread, threadTitle: op.threadTitle, kind: op.kind, title: op.title, summary: op.summary, from: from?.item.id ?? "", quote: op.quote, at: op.at, source: base, html: from?.item.html ?? "" },
+        { id: op.id, thread: op.thread, threadTitle: op.threadTitle, kind: op.kind, title: op.title, summary: op.summary, from: from?.item.id ?? "", quote: op.quote, at: op.at, source: from?.item.source ?? "", html: from?.item.html ?? "" },
         lane,
       );
       if (from?.item.html) this.setContent(card, from.item.html); // start from the previous version, then edit
       this.drawLinks();
       this.focusOn(card);
     }
-    void this.draw(card, op, base, transcript);
+    // One drawing per card at a time: a later edit waits and starts from the result of the earlier one.
+    card.queue = card.queue.then(() => this.draw(card, op, transcript));
   }
 
   private latestIn(thread: string) {
@@ -361,19 +410,20 @@ export class Whiteboard {
     this.statusEl.textContent = parts.join(" · ");
   }
 
-  private async draw(card: Card, op: PlanOp, base: string, transcript: string) {
+  private async draw(card: Card, op: PlanOp, transcript: string) {
+    if (this.cards.get(card.item.id) !== card) return; // removed meanwhile
     this.setDrawing(card, true);
     try {
-      const drawn = await this.api.designCard(op, base, transcript);
-      if (drawn === null || this.cards.get(card.item.id) !== card) return; // superseded or removed
+      const drawn = await this.api.designCard(op, card.item.source, transcript);
+      if (drawn === null || this.cards.get(card.item.id) !== card) return;
       card.item.source = drawn.source;
       card.item.html = drawn.html;
       this.setContent(card, drawn.html);
-      this.setDrawing(card, false);
       void this.api.saveBoard([...this.cards.values()].map((c) => c.item));
     } catch (err) {
-      this.setDrawing(card, false);
       this.onError(String(err));
+    } finally {
+      this.setDrawing(card, false);
     }
   }
 
@@ -396,7 +446,7 @@ export class Whiteboard {
       this.world.prepend(el);
       lane = { index: this.lanes.size, el, title: titleEl };
       this.lanes.set(id, lane);
-      el.style.transform = `translate(-120px, ${lane.index * LANE_H - 260}px)`;
+      el.style.transform = `translate(-120px, ${lane.index * LANE_H - 380}px)`;
     }
     lane.title.textContent = title;
     return lane;
@@ -422,7 +472,10 @@ export class Whiteboard {
     el.append(label, host, quote, caption);
     this.world.append(el);
 
-    const card: Card = { item, col, x, y, el, label, title: label.querySelector(".title")!, host, shadow, quote, caption, drawing: false };
+    const card: Card = {
+      item, col, x, y, el, label, title: label.querySelector(".title")!, host, shadow, quote, caption,
+      drawing: false, createdAt: Date.now(), queue: Promise.resolve(),
+    };
     this.cards.set(item.id, card);
     this.emptyEl.hidden = true;
     this.fillLabels(card);

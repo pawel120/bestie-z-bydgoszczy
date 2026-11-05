@@ -202,15 +202,15 @@ main { flex: 1; min-height: 0; display: flex; }
 
 /* Timeline: lanes (one per idea), ruler with the moment each card came from, arrows between versions. */
 .lane {
-  position: absolute; top: 0; left: 0; height: 1020px; border-radius: 28px; pointer-events: none;
+  position: absolute; top: 0; left: 0; height: 1140px; border-radius: 28px; pointer-events: none;
   background: color-mix(in srgb, var(--surface) 55%, transparent); border: 1px solid var(--border);
 }
 .lane-title {
-  position: absolute; left: 120px; top: 44px; margin: 0; font-size: 44px; font-weight: 650; letter-spacing: -0.02em;
+  position: absolute; left: 120px; top: 36px; margin: 0; font-size: 44px; font-weight: 650; letter-spacing: -0.02em;
   color: var(--text);
 }
 .lane:first-child { }
-.ruler { position: absolute; left: 0; top: -360px; height: 40px; border-bottom: 2px solid var(--border-strong); }
+.ruler { position: absolute; left: 0; top: -470px; height: 40px; border-bottom: 2px solid var(--border-strong); }
 .tick {
   position: absolute; left: 0; bottom: -2px; width: 960px; padding-bottom: 10px; border-left: 2px solid var(--border-strong);
   font: 600 26px ui-monospace, Menlo, monospace; color: var(--faint); padding-left: 12px;
@@ -255,3 +255,9 @@ main { flex: 1; min-height: 0; display: flex; }
 }
 .product-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .product-form button { height: 30px; }
+
+.costs {
+  height: 28px; padding: 0 10px; border-radius: 999px; font: 600 12px ui-monospace, Menlo, monospace;
+  color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); font-variant-numeric: tabular-nums;
+}
+.costs:hover { color: var(--text); }

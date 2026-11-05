@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { BoardItem, CardMeta, Drawn, Gate, PlanOp } from "./board";
+import type { BoardItem, CardMeta, Costs, Drawn, Gate, PlanOp } from "./board";
 import type { Product } from "./product";
 
 const api = {
@@ -26,6 +26,10 @@ const api = {
   },
   loadProduct: (url: string): Promise<Product> => ipcRenderer.invoke("product:load", url),
   clearProduct: (): Promise<void> => ipcRenderer.invoke("product:clear"),
+  onCosts: (listener: (costs: Costs) => void) => {
+    ipcRenderer.on("costs", (_e, costs: Costs) => listener(costs));
+  },
+  resetCosts: (): Promise<void> => ipcRenderer.invoke("costs:reset"),
   saveBoard: (board: BoardItem[]): Promise<void> => ipcRenderer.invoke("board:save", board),
 };
 

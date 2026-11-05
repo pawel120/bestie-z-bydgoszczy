@@ -88,7 +88,7 @@ export function twinPersonas(personas, sessions, goal) {
 // potem ściągnięte do 1: c_k = 1 + (c_k - 1) · n / (n + 10), n = prawdziwe sesje na kroku k-1, i przycięte do [0.5, 2].
 // Prognoza B: szanse zasięgu kroku k = szanse surowego zasięgu B × iloczyn c_j po krokach B do k (kroki spoza A mają c = 1).
 export function calibrate(realSessionsA, run, goal = 'sukces') {
-  const results = run.results.filter(r => r.converted || !['limit_budzetu', 'blad_modelu', 'przerwane'].includes(r.reason));
+  const results = run.results.filter(r => r.converted || !['limit_budzetu', 'blad_modelu', 'przerwane', 'zablokowane'].includes(r.reason));
   const hA = results.filter(r => r.variant === 'A'), hB = results.filter(r => r.variant === 'B');
   if (!realSessionsA.length || !hA.length) return null;
   const pos = {};

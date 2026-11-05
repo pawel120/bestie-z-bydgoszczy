@@ -25,7 +25,7 @@ export function mcnemarExact(b, c) {
 }
 
 // Agent przerwany przez technikalia (budżet, błąd modelu, stop) nie mówi nic o stronie: nie liczymy go do konwersji.
-const TECHNICAL = new Set(['limit_budzetu', 'blad_modelu', 'przerwane']);
+const TECHNICAL = new Set(['limit_budzetu', 'blad_modelu', 'przerwane', 'zablokowane']);
 
 export function summarize(allResults, personas) {
   const results = allResults.filter(r => r.converted || !TECHNICAL.has(r.reason));

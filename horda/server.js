@@ -128,8 +128,11 @@ async function startRun(cfg) {
     const jobs = [];
     // Przeplatamy A i B, żeby oba warianty szły równolegle na podglądzie.
     for (const p of personas) for (const v of Object.keys(variants)) jobs.push({ p, v });
-    const results = await pool(jobs, CONCURRENCY, ({ p, v }) =>
-      runAgent({ browser, persona: p, variant: v, startUrl: variants[v], goal, llm, jev, emit, signal: abort.signal }));
+    // Prawdziwe strony (nie localhost) albo HORDE_SAFE=1: tryb bezpieczny i mniejsza równoległość z grzeczności.
+    const safe = process.env.HORDE_SAFE === '1' || Object.values(variants).some(u => !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(u));
+    if (safe) emit({ type: 'phase', text: 'Prawdziwa strona: tryb bezpieczny (bez formularzy i wysyłania, cel = intencja).' });
+    const results = await pool(jobs, safe ? Math.min(CONCURRENCY, 4) : CONCURRENCY, ({ p, v }) =>
+      runAgent({ browser, persona: p, variant: v, startUrl: variants[v], goal, llm, jev, emit, signal: abort.signal, safe }));
     const summary = summarize(results, personas);
     emit({ type: 'phase', text: 'Analityk podsumowuje wyniki…' });
     summary.insight = await insight(llm, summary, variants);

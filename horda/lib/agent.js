@@ -16,15 +16,24 @@ Maks. 12 akcji naraz (np. wypełnij pola formularza i kliknij wyślij). Gdy wych
 
 const EXTRACT = () => {
   const sel = 'a[href],button,input,select,textarea,[role=button],[onclick],summary,label[for]';
-  const els = [...document.querySelectorAll(sel)];
+  // Stare id z poprzedniego kroku (SPA nie przeładowuje strony) muszą zniknąć, inaczej klik trafi w zły element.
+  document.querySelectorAll('[data-hid]').forEach(e => e.removeAttribute('data-hid'));
+  const RISKY = /sign ?up|zarejestr|załóż|kup|buy|pay|zapłać|subscribe|subskryb|send|wyślij|get started|zamów|order|log ?in|zaloguj/i;
+  const vis = [...document.querySelectorAll(sel)].filter(el => {
+    if (el.tagName === 'LABEL') return false;
+    const r = el.getBoundingClientRect();
+    const st = getComputedStyle(el);
+    return !(r.width < 2 || r.height < 2 || st.visibility === 'hidden' || st.display === 'none' || el.type === 'hidden');
+  });
+  // Najpierw to, co widać w oknie (na prawdziwych stronach nawigacja i stopka zjadałyby limit elementów).
+  const inView = el => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+  const els = [...vis.filter(inView), ...vis.filter(el => !inView(el))];
   const out = [];
   let id = 0;
   for (const el of els) {
-    if (el.tagName === 'LABEL') continue;
     const r = el.getBoundingClientRect();
-    const st = getComputedStyle(el);
-    if (r.width < 2 || r.height < 2 || st.visibility === 'hidden' || st.display === 'none' || el.type === 'hidden') continue;
     el.setAttribute('data-hid', id);
+    if (el.tagName === 'A' && el.target === '_blank') el.removeAttribute('target'); // nowa karta = agent zgubiłby stronę
     let text = (el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || el.title || el.name || '').trim().replace(/\s+/g, ' ').slice(0, 70);
     const lab = el.labels && el.labels[0] ? el.labels[0].innerText.trim().replace(/\s+/g, ' ').slice(0, 50) : '';
     const o = { id, t: el.tagName.toLowerCase() };
@@ -36,14 +45,17 @@ const EXTRACT = () => {
     if (el.form && (el.type === 'submit' || (el.tagName === 'BUTTON' && !el.getAttribute('type')))) o.submit = 1;
     if (el.tagName === 'SELECT') o.options = [...el.options].map(x => x.text).slice(0, 8);
     if (r.top > innerHeight || r.bottom < 0) o.offscreen = 1;
+    // Na prawdziwych stronach (tryb bezpieczny) nie wolno wysłać formularza: przyciski w formularzu typu „wyślij/kup” blokujemy.
+    if (el.form && (o.submit || RISKY.test(text))) o.risky = 1;
     out.push(o);
-    if (++id >= 45) break;
+    if (++id >= 90) break;
   }
   const text = (document.body?.innerText || '').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim().slice(0, 1800);
   return { url: location.href, title: document.title, text, els: out };
 };
 
-export async function runAgent({ browser, persona, variant, startUrl, goal, llm, jev, emit, maxSteps = 12, signal }) {
+export async function runAgent({ browser, persona, variant, startUrl, goal, llm, jev, emit, maxSteps = 12, signal, safe = false }) {
+  if (safe) maxSteps = Math.min(maxSteps, 6);
   const mobile = persona.device === 'mobile';
   const ctx = await browser.newContext({
     viewport: mobile ? { width: 390, height: 780 } : { width: 1280, height: 800 },
@@ -54,6 +66,8 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
   });
   await ctx.addInitScript(() => { window.__HORDE_AGENT = true; }); // nie nagrywaj agentów jako prawdziwych sesji
   const page = await ctx.newPage();
+  // Tryb bezpieczny: żadnych żądań innych niż GET (nic nie wysyłamy, nie logujemy, nie płacimy na prawdziwej stronie).
+  if (safe) await page.route('**/*', route => route.request().method() === 'GET' ? route.continue() : route.abort());
   const errors = [];
   page.on('pageerror', e => errors.push(String(e.message).slice(0, 100)));
   const result = { personaId: persona.id, variant, converted: false, steps: 0, path: [], reason: null, quote: null, thoughts: [], moods: [], decisions: [], errors, ms: 0 };
@@ -74,7 +88,7 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
   };
   const reachedGoal = async () => {
     const url = page.url();
-    if (goal.url && url.includes(goal.url)) return true;
+    if (goal.url && goalRe(goal.url).test(url)) return true;
     if (goal.text) {
       const body = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
       if (body.toLowerCase().includes(goal.text.toLowerCase())) return true;
@@ -90,7 +104,8 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
   try {
     send({ status: 'loading' });
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(safe ? 1200 : 400);
+    if (safe) result.consent = await dismissConsent(page);
     visit();
     const memory = [];
     let stuck = 0;
@@ -98,10 +113,16 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
       if (signal?.aborted) { result.reason = 'przerwane'; break; }
       if (await reachedGoal()) { result.converted = true; break; }
       const state = await page.evaluate(EXTRACT);
+      // Ochrona przed botami (Cloudflare itp.) to nie decyzja człowieka: kończymy jako błąd techniczny, nie omijamy jej.
+      if (BLOCKED.test(state.title + '\n' + state.text.slice(0, 600))) {
+        result.reason = 'zablokowane'; result.quote = 'Strona zablokowała automatyczną przeglądarkę (ochrona przed botami).';
+        send({ status: 'left', reason: result.reason, quote: result.quote, shot: await shot() });
+        break;
+      }
       send({ status: 'thinking', shot: await shot(), url: state.url });
       let d;
       try {
-        d = jev ? await decideJev({ jev, llm, persona, state, memory, steps: result.steps, r, stepName })
+        d = jev ? await decideJev({ jev, llm, persona, state, memory, steps: result.steps, r, stepName, safe })
           : await llm.json(SYSTEM, userPrompt(persona, state, memory, result.steps));
       } catch (e) {
         if (String(e.message).includes('BUDGET') || e.fatal) { result.reason = 'limit_budzetu'; result.quote = e.fatal ? String(e.message).slice(0, 120) : null; break; }
@@ -142,6 +163,7 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
       }
       send({ status: 'acting', think, mood: d.mood, p_leave: pl, shot: preview || undefined, actions });
       for (const a of actions) {
+        if (safe && (['type', 'select', 'check'].includes(a.do) || (a.do === 'click' && state.els.find(e => e.id === a.id)?.risky))) { done.push(`pominięte w trybie bezpiecznym: ${a.do} #${a.id}`); continue; }
         const loc = a.id !== undefined ? page.locator(`[data-hid="${a.id}"]`).first() : null;
         try {
           if (a.do === 'click' && loc) { await loc.click({ timeout: 3000 }); done.push(`kliknąłem #${a.id}`); await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => {}); await page.waitForTimeout(250); }
@@ -224,9 +246,9 @@ const FILLABLE = e => (e.t === 'input' && !['submit', 'button', 'image', 'reset'
 const CLICKABLE = e => ['a', 'button', 'summary'].includes(e.t) || (e.t === 'input' && ['submit', 'button'].includes(e.type)) || (!FILLABLE(e) && e.t !== 'input');
 const elLabel = e => (e.text || e.label || '').slice(0, 60);
 
-async function decideJev({ jev, llm, persona, state, memory, steps, r, stepName }) {
-  const fields = state.els.filter(FILLABLE);
-  const clicks = state.els.filter(e => CLICKABLE(e) && elLabel(e)).slice(0, 60);
+async function decideJev({ jev, llm, persona, state, memory, steps, r, stepName, safe }) {
+  const fields = safe ? [] : state.els.filter(FILLABLE);
+  const clicks = state.els.filter(e => CLICKABLE(e) && elLabel(e) && !(safe && e.risky)).slice(0, 80);
   const options = {
     leave: 'Ta osoba rezygnuje i zamyka kartę TERAZ (biorąc pod uwagę jej cierpliwość, obawy, intencję i to, co widzi na tej stronie).',
     scroll: 'Ta osoba przewija stronę w dół, bo chce zobaczyć więcej, zanim coś kliknie.',
@@ -338,3 +360,32 @@ async function exitQuote(llm, persona, state, reason, stepName) {
   }
   return QUOTE_FALLBACK[reason] || QUOTE_FALLBACK.inne;
 }
+
+// Cel jako wyrażenie regularne (np. "signup|pricing|accounts\\.") albo zwykły fragment URL, gdy regex jest niepoprawny.
+function goalRe(g) {
+  try { return new RegExp(g, 'i'); } catch { return { test: u => u.includes(g) }; }
+}
+
+// Banery cookies: klikamy opcję najbardziej prywatną (odrzuć / tylko niezbędne), także w ramkach CMP.
+// Jeśli jej nie ma, banner zostaje i persona radzi sobie z nim jak człowiek.
+const REJECT = /^(odrzuć( wszystkie)?|odrzucam|reject( all)?|decline( all)?|deny( all)?|only (necessary|essential)|tylko niezbędne|necessary only|use necessary cookies only|refuse( all)?|nie zgadzam się)(?![a-ząćęłńóśźż])/i;
+async function dismissConsent(page) {
+  for (const frame of page.frames()) {
+    try {
+      const buttons = frame.locator('button, [role=button], a[role=button], input[type=button]');
+      const n = Math.min(await buttons.count(), 80);
+      for (let i = 0; i < n; i++) {
+        const b = buttons.nth(i);
+        const t = ((await b.innerText({ timeout: 300 }).catch(() => '')) || '').trim();
+        if (t.length < 40 && REJECT.test(t) && await b.isVisible().catch(() => false)) {
+          await b.click({ timeout: 2000 });
+          await page.waitForTimeout(400);
+          return 'odrzucone: ' + t;
+        }
+      }
+    } catch {}
+  }
+  return 'brak przycisku odrzuć';
+}
+
+const BLOCKED = /you have been blocked|attention required|verify you are (a )?human|just a moment\.\.\.|checking your browser|access denied|are you a robot|captcha|unusual traffic|request blocked|px-captcha/i;

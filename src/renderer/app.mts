@@ -287,6 +287,17 @@ boardToggle.addEventListener("change", () => {
   if (board.enabled) void board.flush();
 });
 $("board-refresh").addEventListener("click", () => void board.flush());
+
+const costsEl = $<HTMLButtonElement>("costs");
+const usd = (n: number) => `$${n < 1 ? n.toFixed(3) : n.toFixed(2)}`;
+api.onCosts((c) => {
+  costsEl.textContent = usd(c.total);
+  costsEl.title =
+    `Koszt AI tablicy od uruchomienia (kliknij, aby wyzerować)\n` +
+    `Claude (plan + karty): ${usd(c.claude)}\nGroq: ${usd(c.groq)}\nJev: ${usd(c.jev)}\nWywołań: ${c.calls}\n` +
+    `Transkrypcja ElevenLabs liczona osobno (za czas nagrania).`;
+});
+costsEl.addEventListener("click", () => void api.resetCosts());
 $("product-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const input = $<HTMLInputElement>("product-url");

@@ -53,6 +53,51 @@ const DESIGNER_MODEL = process.env.BESTIE_DESIGNER_MODEL || GROQ_MODEL;
 const CLAUDE_DESIGNER_MODEL = "claude-opus-5-5";
 const JEV_MODEL = "typesafe/jev-1.14";
 
+// Running cost of the board, per provider, in USD. Jev reports its own cost; Groq and Claude are computed from token
+// usage at list prices (Opus 5.5 fast mode: $8 in / $40 out per MTok, cache reads $0.40, cache writes $10).
+export interface Costs {
+  total: number;
+  jev: number;
+  groq: number;
+  claude: number;
+  calls: number;
+}
+const costs: Costs = { total: 0, jev: 0, groq: 0, claude: 0, calls: 0 };
+let onCosts: (costs: Costs) => void = () => {};
+export function watchCosts(listener: (costs: Costs) => void) {
+  onCosts = listener;
+  listener({ ...costs });
+}
+export function resetCosts() {
+  Object.assign(costs, { total: 0, jev: 0, groq: 0, claude: 0, calls: 0 });
+  onCosts({ ...costs });
+}
+function addCost(provider: "jev" | "groq" | "claude", usd: number) {
+  costs[provider] += usd;
+  costs.total += usd;
+  costs.calls++;
+  onCosts({ ...costs });
+}
+const GROQ_PRICE = { input: 0.15e-6, output: 0.6e-6 };
+const OPUS_FAST_PRICE = { input: 8e-6, output: 40e-6, cacheRead: 0.4e-6, cacheWrite: 10e-6 };
+function addClaudeUsage(usage: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+}) {
+  addCost(
+    "claude",
+    usage.input_tokens * OPUS_FAST_PRICE.input +
+      usage.output_tokens * OPUS_FAST_PRICE.output +
+      (usage.cache_read_input_tokens ?? 0) * OPUS_FAST_PRICE.cacheRead +
+      (usage.cache_creation_input_tokens ?? 0) * OPUS_FAST_PRICE.cacheWrite,
+  );
+}
+function addGroqUsage(usage?: { prompt_tokens?: number; completion_tokens?: number }) {
+  if (usage) addCost("groq", (usage.prompt_tokens ?? 0) * GROQ_PRICE.input + (usage.completion_tokens ?? 0) * GROQ_PRICE.output);
+}
+
 /** The existing product the meeting is about (optional): every card is designed as part of it. */
 let product: Product | null = null;
 export function setProduct(next: Product | null) {
@@ -86,6 +131,11 @@ progress) and a hint from a fast classifier about what just happened. Return the
   card in that thread with from = the card it builds on. The old card stays as history.
 - "edit": a small refinement of the latest card of a thread (copy, a field, a detail) → same card id, in place.
 Prefer edit over evolve and evolve over create; never duplicate a thread that already covers the idea.
+React ONLY to the lines marked >> (new since your last update); the other lines are context you already handled.
+Never make a card for a quote that is already on the board. "Change just the button", "faster", "tone it down" and
+similar corrections are an EDIT of the latest card they refer to, never a new version.
+If someone asks to draw something unrelated to the product ("narysuj drzewo", "narysuj jabłko"), just draw it:
+create a new thread with kind "idea" and a brief describing the drawing (an illustration made of HTML/CSS/SVG).
 When someone asks the board to propose ideas or to design something ("AI, pokaż pomysły", "zaprojektuj to"), do
 not wait for more input: come up with 1–2 concrete, well-chosen ideas yourself (for the base product, if there is
 one) and create them, quoting the request.
@@ -196,7 +246,7 @@ function describeBoard(board: CardMeta[]) {
     .map(
       (cards) =>
         `Thread "${cards[0].thread}" — ${cards[0].threadTitle}\n` +
-        cards.map((c) => `  card ${c.id} [${c.kind}] ${c.title}: ${c.summary}`).join("\n"),
+        cards.map((c) => `  card ${c.id} [${c.kind}] ${c.title}: ${c.summary} (from ${c.at} "${c.quote}")`).join("\n"),
     )
     .join("\n") || "(empty)";
 }
@@ -235,9 +285,11 @@ export async function gateBoard(apiKey: string, recent: string, board: CardMeta[
     body: JSON.stringify({ model: JEV_MODEL, state: `Board:\n${describeBoard(board)}\n\nConversation:\n${recent}`, questions }),
   });
   if (!res.ok) throw new Error(`Jev: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
-  const { answers } = (await res.json()) as {
+  const { answers, usage } = (await res.json()) as {
     answers: Record<string, { choice: string; confidence: number; probabilities?: Record<string, number> }>;
+    usage?: { cost?: number };
   };
+  addCost("jev", usage?.cost ?? 0);
   const thread = answers.thread?.choice;
   return {
     action: answers.action.choice as GateAction,
@@ -281,7 +333,11 @@ export async function planBoard(
     GROQ_MODEL,
   );
   if (!res.ok) throw await failure(res);
-  const data = (await res.json()) as { choices: { message: { content: string } }[] };
+  const data = (await res.json()) as {
+    choices: { message: { content: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
+  addGroqUsage(data.usage);
   return (JSON.parse(data.choices[0].message.content) as { ops: PlanOp[] }).ops;
 }
 
@@ -295,6 +351,7 @@ async function planWithClaude(apiKey: string, content: string, ideating: boolean
     system: [{ type: "text", text: PLANNER_PROMPT, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content }],
   });
+  addClaudeUsage(message.usage);
   if (message.stop_reason === "refusal") throw new Error("Claude odmówił zaplanowania tablicy.");
   const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
   return (JSON.parse(text) as { ops: PlanOp[] }).ops;
@@ -376,6 +433,7 @@ async function drawWithClaude(
     void partial(html);
   });
   const message = await stream.finalMessage();
+  addClaudeUsage(message.usage);
   if (message.stop_reason === "refusal") throw new Error("Claude odmówił narysowania tej karty.");
   return html;
 }
@@ -452,6 +510,7 @@ async function editWithClaude(
       void partial(file, true);
     });
     const message = await stream.finalMessage();
+    addClaudeUsage(message.usage);
     if (message.stop_reason === "refusal") throw new Error("Claude odmówił edycji tej karty.");
     if (message.stop_reason !== "tool_use" || results.every((r) => !r.is_error)) break;
     messages.push({ role: "assistant", content: message.content }, { role: "user", content: results });
