@@ -35,11 +35,13 @@ export interface PlanOp extends CardMeta {
   brief: string;
 }
 
-export type GateAction = "create" | "evolve" | "edit" | "wait";
+export type GateAction = "create" | "evolve" | "edit" | "ask" | "wait";
 
 export interface Gate {
   action: GateAction;
   confidence: number;
+  /** Probability that there is nothing to draw; the board only waits when this is high. */
+  wait: number;
   /** Thread the conversation is about, when the board already has threads. */
   thread: string | null;
 }
@@ -84,6 +86,9 @@ progress) and a hint from a fast classifier about what just happened. Return the
   card in that thread with from = the card it builds on. The old card stays as history.
 - "edit": a small refinement of the latest card of a thread (copy, a field, a detail) → same card id, in place.
 Prefer edit over evolve and evolve over create; never duplicate a thread that already covers the idea.
+When someone asks the board to propose ideas or to design something ("AI, pokaż pomysły", "zaprojektuj to"), do
+not wait for more input: come up with 1–2 concrete, well-chosen ideas yourself (for the base product, if there is
+one) and create them, quoting the request.
 
 Per op: kind ("mockup" = a UI screen, "flow" = a user flow / process, "idea" = a concept that is not visual yet;
 when people talk about a product, its main screen as a mockup is what makes the board useful), title, a one-sentence
@@ -211,7 +216,8 @@ export async function gateBoard(apiKey: string, recent: string, board: CardMeta[
         create: "They describe a new concrete product idea, feature, screen or flow that is not on the board yet",
         evolve: "They substantially change an idea that is already on the board (new direction, variant, other screen)",
         edit: "They add a small detail or refinement to an idea already on the board",
-        wait: "Small talk, logistics, agreement, or an idea that is still too vague to draw",
+        ask: "Someone asks the AI / the board to propose, show, design or draw something (e.g. 'AI, pokaż pomysły')",
+        wait: "Small talk, logistics or agreement with no request and no idea at all",
       },
     },
   };
@@ -229,12 +235,13 @@ export async function gateBoard(apiKey: string, recent: string, board: CardMeta[
   });
   if (!res.ok) throw new Error(`Jev: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`);
   const { answers } = (await res.json()) as {
-    answers: Record<string, { choice: string; confidence: number }>;
+    answers: Record<string, { choice: string; confidence: number; probabilities?: Record<string, number> }>;
   };
   const thread = answers.thread?.choice;
   return {
     action: answers.action.choice as GateAction,
     confidence: answers.action.confidence,
+    wait: answers.action.probabilities?.wait ?? (answers.action.choice === "wait" ? answers.action.confidence : 0),
     thread: thread && thread !== "none" ? thread : null,
   };
 }

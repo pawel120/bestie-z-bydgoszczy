@@ -29,7 +29,15 @@ const KIND_ICON: Record<Kind, string> = {
   flow: '<rect x="2" y="9" width="6" height="6" rx="1"/><rect x="16" y="9" width="6" height="6" rx="1"/><path d="M8 12h8"/>',
   idea: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
 };
-const GATE_LABEL: Record<string, string> = { create: "nowy pomysł", evolve: "nowa wersja", edit: "poprawka", wait: "czekam" };
+const GATE_LABEL: Record<string, string> = {
+  create: "nowy pomysł",
+  evolve: "nowa wersja",
+  edit: "poprawka",
+  ask: "prośba o pomysły",
+  wait: "czekam",
+};
+/** Talking to the board directly always goes straight to the planner. */
+const DIRECT_REQUEST = /\b(ai|aj|ej ai|tablic\w*|bestie)\b.*\b(pokaż|pokaz|zaprojektuj|narysuj|zrób|zrob|wymyśl|wymysl|zaproponuj|show|design|draw)|\b(pokaż|zaprojektuj|narysuj|wymyśl|zaproponuj)\w*\s+(mi|nam)?\s*(pomys|mockup|ekran|wersj|landing)/i;
 /** Ask the gate this long after the conversation last changed… */
 const DEBOUNCE_MS = 1_200;
 /** …but at least this often while people keep talking. */
@@ -281,14 +289,19 @@ export class Whiteboard {
     const linesSeen = this.lines.length;
     try {
       let hint = "brak klasyfikatora";
-      if (!force) {
+      const fresh = [...this.lines.slice(this.plannedLines), ...this.live()].join(" ");
+      if (!force && DIRECT_REQUEST.test(fresh)) {
+        hint = "ask: someone asked the board directly to propose or design something";
+        this.lastStep = "Prośba do tablicy";
+      } else if (!force) {
         this.setStatus("Słucham…");
         const gate = await this.api.gateBoard(this.recent(), this.metas());
         if (gate) {
           const lane = gate.thread ? this.lanes.get(gate.thread) : null;
           hint = `${gate.action} (pewność ${Math.round(gate.confidence * 100)}%)${gate.thread ? `, wątek ${gate.thread}` : ""}`;
           this.lastStep = `Jev: ${GATE_LABEL[gate.action] ?? gate.action}${lane ? ` · ${lane.title.textContent}` : ""}`;
-          if (gate.action === "wait") {
+          // Only wait when the classifier is quite sure; when in doubt, let the planner decide.
+          if (gate.action === "wait" && gate.wait >= 0.7) {
             this.checkedVersion = version;
             return;
           }
