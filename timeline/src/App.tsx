@@ -1,26 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import rawTranscript from '../data/transcript.txt?raw'
-import mindmap from './data/mindmap.json'
-import { InsightPanel } from './components/InsightPanel'
-import { MindMap } from './components/MindMap'
-import { Timeline } from './components/Timeline'
-import { TranscriptTicker } from './components/TranscriptTicker'
-import { layout } from './lib/layout'
+import board from './data/board.json'
+import { Canvas } from './components/Canvas'
+import { IdeaRail } from './components/IdeaRail'
+import { MockModal } from './components/MockModal'
+import { Scrubber } from './components/Scrubber'
+import type { BoardData } from './lib/board'
 import { parseTranscript } from './lib/transcript'
-import type { MindMapData } from './lib/types'
 
-const data = mindmap as MindMapData
+const data = board as BoardData
 
 export default function App() {
   const [time, setTime] = useState(0)
   const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(12)
+  const [speed, setSpeed] = useState(20)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
 
-  const placed = useMemo(() => layout(data), [])
   const lines = useMemo(() => parseTranscript(rawTranscript), [])
+  const openNode = data.nodes.find((node) => node.id === openId) ?? null
 
-  const lastFrame = useRef<number>(0)
+  const lastFrame = useRef(0)
   useEffect(() => {
     if (!playing) return
     lastFrame.current = performance.now()
@@ -46,68 +46,60 @@ export default function App() {
     const onKey = (event: KeyboardEvent) => {
       if (event.code === 'Space') {
         event.preventDefault()
-        setPlaying((p) => !p)
+        setPlaying((value) => !value)
       }
-      if (event.code === 'ArrowRight') setTime((t) => Math.min(data.meta.durationSec, t + 15))
-      if (event.code === 'ArrowLeft') setTime((t) => Math.max(0, t - 15))
+      if (event.code === 'ArrowRight') setTime((t) => Math.min(data.meta.durationSec, t + 20))
+      if (event.code === 'ArrowLeft') setTime((t) => Math.max(0, t - 20))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const seek = (t: number) => {
-    setTime(t)
-  }
+  const mockCount = data.nodes.filter((node) => node.type === 'mock' && node.t <= time).length
 
   return (
     <div className="app">
-      <header>
-        <div className="brand">
-          <span className="logo" />
+      <header className="topbar">
+        <div className="topbar-brand">
+          <span className="mark" />
           <div>
-            <h1>Thoughtline</h1>
-            <p>{data.meta.title}</p>
+            <strong>Thoughtline</strong>
+            <span>{data.meta.title}</span>
           </div>
         </div>
-        <div className="source">
-          <span>{data.meta.source}</span>
-          <span className="muted">
-            {data.nodes.length} węzłów · {data.links.length} powiązań wyciągniętych z transkryptu
+        <div className="topbar-meta">
+          <span className="pill">{data.meta.source}</span>
+          <span className="pill is-strong">
+            {mockCount} {mockCount === 1 ? 'makieta' : mockCount > 1 && mockCount < 5 ? 'makiety' : 'makiet'} na
+            kanwie
           </span>
         </div>
       </header>
 
       <main>
-        <MindMap
+        <IdeaRail data={data} time={time} selectedId={selectedId} onSelect={setSelectedId} />
+        <Canvas
           data={data}
-          placed={placed}
           time={time}
-          playing={playing}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          onOpen={setOpenId}
         />
-        <aside>
-          <InsightPanel
-            data={data}
-            placed={placed}
-            time={time}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onSeek={seek}
-          />
-          <TranscriptTicker lines={lines} time={time} />
-        </aside>
       </main>
 
-      <Timeline
+      <Scrubber
         data={data}
+        lines={lines}
         time={time}
         playing={playing}
         speed={speed}
-        onSeek={seek}
-        onTogglePlay={() => setPlaying((p) => !p)}
+        onSeek={setTime}
+        onTogglePlay={() => setPlaying((value) => !value)}
         onSpeed={setSpeed}
+        onSelect={setSelectedId}
       />
+
+      {openNode && <MockModal data={data} node={openNode} onClose={() => setOpenId(null)} />}
     </div>
   )
 }
