@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { BoardItem, CardMeta, Costs, Drawn, Gate, PlanOp } from "./board";
+import type { Images, InternetIntent, Research, Video } from "./internet";
 import type { Product } from "./product";
 
 const api = {
@@ -24,6 +25,10 @@ const api = {
   onBoardPartial: (listener: (id: string, html: string) => void) => {
     ipcRenderer.on("board:partial", (_e, id: string, html: string) => listener(id, html));
   },
+  internetIntent: (earlier: string, fresh: string): Promise<InternetIntent[]> => ipcRenderer.invoke("internet:intent", earlier, fresh),
+  researchWeb: (request: string, context: string): Promise<Research> => ipcRenderer.invoke("internet:research", request, context),
+  findImages: (request: string): Promise<Images> => ipcRenderer.invoke("internet:images", request),
+  findVideo: (query: string): Promise<Video | null> => ipcRenderer.invoke("internet:video", query),
   loadProduct: (url: string): Promise<Product> => ipcRenderer.invoke("product:load", url),
   clearProduct: (): Promise<void> => ipcRenderer.invoke("product:clear"),
   /** Null without a Claude key. */

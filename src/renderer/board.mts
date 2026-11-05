@@ -37,6 +37,8 @@ const GATE_LABEL: Record<string, string> = {
   wait: "czekam",
 };
 /** Talking to the board directly always goes straight to the planner. */
+/** Words that may mean the internet is wanted. Only then does a small model read the lines, so other talk costs nothing. */
+const INTERNET_HINT = /internet|sie[cć]i?\b|sprawd[zź]|zbadaj|zresearch|zriser|research|konkurenc|wejd[zź]|poszukaj|wyszukaj|znajd[zź]|zdj[eę]ci|fotk|grafik|obraz|inspirac|film|wideo|video|youtube|jutub|subway|w[lł][aą]cz|wy[lł][aą]cz|odpal/iu;
 const DIRECT_REQUEST = /\b(ai|aj|ej ai|tablic\w*|bestie)\b.*\b(pokaż|pokaz|zaprojektuj|narysuj|zrób|zrob|wymyśl|wymysl|zaproponuj|show|design|draw)|\b(pokaż|zaprojektuj|narysuj|wymyśl|zaproponuj)\w*\s+(mi|nam)?\s*(pomys|mockup|ekran|wersj|landing)/i;
 /** Ask the gate this long after the conversation last changed… */
 const DEBOUNCE_MS = 1_200;
@@ -414,6 +416,20 @@ export class Whiteboard {
     this.clearTimers();
     this.busy = true;
     try {
+      if (INTERNET_HINT.test(fresh.join(" "))) {
+        this.setStatus("Słucham…");
+        const context = this.lines.slice(Math.max(0, this.plannedLines - 6), this.plannedLines).join("");
+        const wanted = await this.api.internetIntent(context, fresh.join("")).catch((err) => {
+          this.onError(String(err));
+          return [];
+        });
+        if (wanted.length) {
+          this.plannedLines = upTo;
+          // Lines said close together arrive as one batch: every request in it counts.
+          for (const request of wanted) void this.useInternet(request, fresh.join("")).catch((err) => this.onError(String(err)));
+          return;
+        }
+      }
       let hint = "brak klasyfikatora";
       const ask = DIRECT_REQUEST.test(fresh.join(" "));
       if (!force && ask) {
@@ -453,6 +469,85 @@ export class Whiteboard {
     }
     // More lines arrived while we were busy.
     if (this.lines.length > this.plannedLines) this.changed();
+  }
+
+  // MARK: - Internet
+
+  private async useInternet({ action, topic, intoPage }: { action: string; topic: string; intoPage: boolean }, said: string) {
+    if (action === "stop_video") return this.showVideo(null);
+    const notes: Record<string, string> = { research: "szuka w sieci…", photos: "szuka grafik…", video: "szuka filmu…" };
+    const agent = this.cursor(action === "research" ? "Researcher" : "Agent 1");
+    agent.work(this.nextSlotRect(), notes[action] ?? "");
+    const at = said.match(/\[(\d+:\d+)\]/)?.[1] ?? "";
+    try {
+      if (action === "video") {
+        const video = await this.api.findVideo(topic);
+        if (!video) throw new Error(`Nie znalazłem filmu: ${topic}`);
+        this.showVideo(video);
+      } else if (action === "photos") {
+        const { urls, html } = await this.api.findImages(topic);
+        const page = intoPage ? this.pageBeingBuilt() : undefined;
+        if (page) this.putPhotos(page, topic, urls);
+        else this.fillWebCard(this.webCard(topic, at), topic, html);
+      } else {
+        const card = this.webCard(`Sprawdzam: ${topic}`.slice(0, 120), at);
+        this.setDrawing(card, true);
+        try {
+          const { title, html } = await this.api.researchWeb(topic, this.lines.slice(-12).join(""));
+          this.fillWebCard(card, title, html);
+        } finally {
+          this.setDrawing(card, false);
+        }
+      }
+    } finally {
+      agent.done();
+    }
+  }
+
+  /** The newest drawn card that isn't itself an internet result. */
+  private pageBeingBuilt() {
+    return [...this.cards.values()].filter((c) => c.item.thread !== "internet" && c.item.source).at(-1);
+  }
+
+  private putPhotos(card: Card, topic: string, urls: string[]) {
+    const { source: _source, html: _html, ...meta } = card.item;
+    const brief = `${topic}\nPut these real photos into the page with <img src> and object-cover, where they fit best. This replaces the rule against external images, for exactly these URLs:\n${urls.join("\n")}`;
+    this.apply({ ...meta, op: "edit", brief, explore: [] }, this.marked());
+  }
+
+  private webCard(title: string, at: string) {
+    const id = this.uniqueId("internet", (taken) => this.cards.has(taken));
+    const item = { id, thread: "internet", threadTitle: "Internet", kind: "idea" as const, title, summary: title, from: "", quote: "", at, source: "", html: "" };
+    const card = this.createCard(item, this.lane(item.thread, item.threadTitle));
+    this.drawLinks();
+    this.focusOn(card);
+    return card;
+  }
+
+  private fillWebCard(card: Card, title: string, html: string) {
+    Object.assign(card.item, { title, summary: title, source: html, html });
+    this.fillLabels(card);
+    this.setContent(card, html);
+    void this.api.saveBoard([...this.cards.values()].map((c) => c.item));
+  }
+
+  private showVideo(video: { id: string; title: string } | null) {
+    document.querySelector(".board-video")?.remove();
+    if (!video) return;
+    const panel = document.createElement("aside");
+    panel.className = "board-video";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "Zamknij film");
+    close.addEventListener("click", () => panel.remove());
+    const frame = document.createElement("iframe");
+    frame.title = video.title;
+    frame.allow = "autoplay; encrypted-media";
+    frame.referrerPolicy = "strict-origin-when-cross-origin"; // YouTube refuses to play without it
+    frame.src = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&mute=1&loop=1&playlist=${video.id}`;
+    panel.append(close, frame);
+    document.body.append(panel);
   }
 
   /**

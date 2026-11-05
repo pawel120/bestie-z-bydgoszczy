@@ -6,6 +6,8 @@ export interface PageConfig {
   groq?: string;
   anthropic?: string;
   openrouter?: string;
+  /** Claude through web/local.mjs and your own login, instead of an API key. */
+  login?: boolean;
   /** Transcription language ("pl", "en" or "auto"). */
   lang?: string;
   /** Opened by the Recall bot: listen to the meeting and start recording on its own. */

@@ -2,6 +2,7 @@ import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session, she
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { findImages, findVideo, internetIntent, researchWeb } from "./internet";
 import { addHordaCost, boardToHtml, currentProduct, designCard, gateBoard, planBoard, replicateProduct, resetCosts, setProduct, watchCosts, type BoardItem, type CardMeta, type PlanOp } from "./board";
 import { DEFAULT_GOAL, ensureHorda, publishCard, runHorda, stopHorda } from "./horda";
 import { loadProduct } from "./product";
@@ -124,6 +125,16 @@ function registerIpc() {
     const apiKey = await getApiKey("openrouter");
     return apiKey ? gateBoard(apiKey, recent, board) : null;
   });
+
+  const withClaude = async <T>(run: (apiKey: string) => Promise<T>) => {
+    const apiKey = await getApiKey("anthropic");
+    if (!apiKey) throw new Error("Internet na tablicy wymaga klucza Claude.");
+    return run(apiKey);
+  };
+  ipcMain.handle("internet:intent", (_e, earlier: string, fresh: string) => withClaude((key) => internetIntent(key, earlier, fresh)));
+  ipcMain.handle("internet:research", (_e, request: string, context: string) => withClaude((key) => researchWeb(key, request, context)));
+  ipcMain.handle("internet:images", (_e, request: string) => withClaude((key) => findImages(key, request)));
+  ipcMain.handle("internet:video", (_e, query: string) => withClaude((key) => findVideo(key, query)));
 
   ipcMain.handle("board:plan", async (_e, transcript: string, board: CardMeta[], hint: string) => {
     const keys = { groq: await getApiKey("groq"), anthropic: await getApiKey("anthropic") };
