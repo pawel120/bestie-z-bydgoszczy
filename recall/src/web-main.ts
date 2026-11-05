@@ -132,11 +132,73 @@ const api: BestieApi = {
   saveBoard: async (items) => void (board = items),
 };
 
+// MARK: - Live view (/#view): the bot pushes snapshots of its screen, viewers replay them
+
+const VIEW_W = 1280;
+const VIEW_H = 720;
+const liveUrl = (role: string) =>
+  `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/live?role=${role}${config.live ? `&token=${config.live}` : ""}`;
+
+/** Body with every shadow root (the cards) as declarative shadow DOM, plus the styles added at runtime. */
+function snapshot() {
+  const shadowRoots = [...document.querySelectorAll("*")].flatMap((el) => (el.shadowRoot ? [el.shadowRoot] : []));
+  const styles = [...document.head.querySelectorAll("style")].map((s) => s.textContent).join("\n");
+  return JSON.stringify({ body: document.body.getHTML({ shadowRoots }), bodyClass: document.body.className, styles });
+}
+
+function pushLive() {
+  let ws: WebSocket | null = null;
+  let last = "";
+  const connect = () => {
+    ws = new WebSocket(liveUrl("bot"));
+    ws.onclose = () => window.setTimeout(connect, 2000);
+  };
+  connect();
+  window.setInterval(() => {
+    if (ws?.readyState !== WebSocket.OPEN) return;
+    const next = snapshot();
+    if (next !== last) ws.send((last = next));
+  }, 1000);
+}
+
+function viewLive() {
+  document.title = "Bestie · na żywo";
+  const extra = document.createElement("style");
+  document.head.append(extra);
+  const fit = document.createElement("style");
+  document.head.append(fit);
+  const resize = () => {
+    const k = Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H);
+    fit.textContent = `html { background: #000; overflow: hidden; }
+      body { width: ${VIEW_W}px !important; height: ${VIEW_H}px !important; transform-origin: 0 0; pointer-events: none;
+        transform: translate(${(innerWidth - VIEW_W * k) / 2}px, ${(innerHeight - VIEW_H * k) / 2}px) scale(${k}); }`;
+  };
+  addEventListener("resize", resize);
+  resize();
+  document.body.innerHTML = '<p style="color:#888;font:16px system-ui;text-align:center;margin-top:30vh">Czekam na obraz z bota…</p>';
+  const connect = () => {
+    const ws = new WebSocket(liveUrl("view"));
+    ws.onmessage = (e) => {
+      const { body, bodyClass, styles } = JSON.parse(String(e.data));
+      extra.textContent = styles;
+      document.body.className = bodyClass;
+      document.body.setHTMLUnsafe(body);
+    };
+    ws.onclose = () => window.setTimeout(connect, 2000);
+  };
+  connect();
+}
+
+const viewing = location.hash === "#view";
+if (viewing) viewLive();
+
 window.bestie = api;
 
 // In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable).
 document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel { display: none !important; }" }));
+if (viewing) throw new Error("live view"); // stop here: the viewer only replays the bot's screen
 await import("../../src/renderer/app.mts");
+if (config.bot && config.live) pushLive();
 
 // The bot starts listening as soon as the page is up.
 if (config.bot) {
