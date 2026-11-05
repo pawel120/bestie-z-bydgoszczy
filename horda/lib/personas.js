@@ -86,5 +86,6 @@ Urządzenie: ${p.device === 'mobile' ? 'telefon (mały ekran, kciuk, mało cierp
 Intencja: ${p.intent}. Obeznanie z technologią: ${p.tech}. Wrażliwość na cenę: ${p.priceSensitivity}.
 Sposób czytania: ${p.reading}.
 Co Cię najbardziej zniechęca w zakupach online: ${p.concernText}.
-Cierpliwość: wytrzymasz ok. ${p.patience} kroków, potem odpuszczasz.`;
+Cierpliwość: wytrzymasz ok. ${p.patience} kroków, potem odpuszczasz.${p.realSession ? `
+W prawdziwej sesji ta osoba: ${p.realSession}.` : ''}`;
 }

@@ -1,13 +1,15 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { LLM } from './lib/llm.js';
-import { Jev, JEV_LABEL, JEV_MODEL } from './lib/jev.js';
+import { Jev, JEV_LABEL, jevModel } from './lib/jev.js';
 import { makePersonas } from './lib/personas.js';
 import { runAgent } from './lib/agent.js';
 import { summarize } from './lib/stats.js';
+import { SessionStore, twinPersonas, calibrate } from './lib/sessions.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 // Prosty loader .env (bez zależności). Klucz NIGDY nie trafia do repo: .env jest w .gitignore.
@@ -27,9 +29,21 @@ const BRAIN = (process.env.HORDE_BRAIN || 'jev').toLowerCase() === 'llm' ? 'llm'
 const BRAIN_MODELS = BRAIN === 'jev' ? [JEV_LABEL, ...MODELS] : MODELS;
 const modelLabel = llm => BRAIN === 'jev' ? JEV_LABEL : llm.lastModel;
 
+const sessions = new SessionStore(path.join(ROOT, 'runs', 'sessions.jsonl'));
+// Dostęp z sieci lokalnej (telefony w tym samym Wi-Fi) tylko po świadomym ustawieniu HORDE_HOST=0.0.0.0.
+const HOST = process.env.HORDE_HOST || '127.0.0.1';
+const lanIp = () => Object.values(os.networkInterfaces()).flat().find(i => i && i.family === 'IPv4' && !i.internal)?.address || null;
+const lanUrl = () => HOST === '0.0.0.0' && lanIp() ? `http://${lanIp()}:${PORT}` : null;
+const calibration = () => lastRun ? calibrate(sessions.sessions('A'), lastRun, lastRun.cfg.goalUrl || 'sukces') : null;
+
 const clients = new Set();
 let current = null; // { abort, llm, started }
 let lastRun = null;
+// Ostatni przebieg z dysku, żeby panel kalibracji działał po restarcie serwera.
+try {
+  const f = fs.readdirSync(path.join(ROOT, 'runs')).filter(x => /^run-\d+\.json$/.test(x)).sort().pop();
+  if (f) lastRun = JSON.parse(fs.readFileSync(path.join(ROOT, 'runs', f), 'utf8'));
+} catch {}
 const emit = (ev) => {
   const data = `data: ${JSON.stringify(ev)}\n\n`;
   for (const res of clients) res.write(data);
@@ -102,7 +116,13 @@ async function startRun(cfg) {
   try {
     emit({ type: 'phase', text: cfg.audience ? 'Generuję persony z opisu grupy docelowej…' : 'Losuję persony…' });
     const roles = await personaRoles(llm, cfg.audience, n);
-    const personas = makePersonas(n, Number(cfg.seed) || Date.now() % 100000, roles);
+    let personas = makePersonas(n, Number(cfg.seed) || Date.now() % 100000, roles);
+    // Bliźniaki: persona dostaje urządzenie, cierpliwość i opis zachowania z prawdziwej sesji na A (te same persony idą na B).
+    const realA = cfg.twins ? sessions.sessions('A') : [];
+    if (realA.length) {
+      personas = twinPersonas(personas, realA, goal.url || 'sukces');
+      emit({ type: 'phase', text: `Persony-bliźniaki z ${realA.length} prawdziwych sesji…` });
+    }
     emit({ type: 'start', personas, variants, goal, models: BRAIN_MODELS, brain: BRAIN, budget: llm.budgetUsd });
     const browser = await getBrowser();
     const jobs = [];
@@ -115,6 +135,7 @@ async function startRun(cfg) {
     summary.insight = await insight(llm, summary, variants);
     summary.cost = { spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: modelLabel(llm), brain: BRAIN, servedBy: llm.servedBy, ms: Date.now() - current.started };
     lastRun = { cfg: { ...cfg, key: undefined }, personas, results, summary, at: new Date().toISOString() };
+    summary.calibration = calibration();
     try {
       fs.mkdirSync(path.join(ROOT, 'runs'), { recursive: true });
       fs.writeFileSync(path.join(ROOT, 'runs', `run-${Date.now()}.json`), JSON.stringify(lastRun, null, 2));
@@ -144,7 +165,7 @@ const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
   if (u.pathname === '/api/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`data: ${JSON.stringify({ type: 'hello', running: !!current, hasKey: !!process.env.OPENROUTER_API_KEY, models: BRAIN_MODELS, lastRun: lastRun ? { summary: lastRun.summary } : null })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'hello', running: !!current, hasKey: !!process.env.OPENROUTER_API_KEY, models: BRAIN_MODELS, lanUrl: lanUrl(), lastRun: lastRun ? { summary: lastRun.summary } : null })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -165,6 +186,25 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200).end('ok');
     return;
   }
+  if (u.pathname === '/api/sessions' && req.method === 'POST') {
+    let body = '';
+    for await (const c of req) { body += c; if (body.length > 50000) break; }
+    let ok = false;
+    try { ok = sessions.add(JSON.parse(body)); } catch {}
+    res.writeHead(ok ? 204 : 400).end();
+    if (ok) emit({ type: 'sessions' });
+    return;
+  }
+  if (u.pathname === '/api/sessions' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ variants: sessions.aggregate(), lanUrl: lanUrl(), calibration: calibration() }));
+    return;
+  }
+  if (u.pathname === '/api/sessions/clear' && req.method === 'POST') {
+    sessions.clear();
+    res.writeHead(200).end('ok');
+    emit({ type: 'sessions' });
+    return;
+  }
   if (u.pathname === '/api/last') {
     res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(lastRun));
     return;
@@ -173,10 +213,12 @@ const server = http.createServer(async (req, res) => {
   return serveStatic(res, path.join(ROOT, 'public'), u.pathname === '/' ? 'index.html' : u.pathname);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`\n  🐝 Horda działa: http://localhost:${PORT}`);
+  if (lanUrl()) console.log(`  W sieci lokalnej (telefony w tym samym Wi-Fi): ${lanUrl()}/demo/a/`);
+  else console.log(`  Tylko localhost. Żeby otworzyć demo na telefonie w tym samym Wi-Fi: HORDE_HOST=0.0.0.0 npm start`);
   console.log(`  Demo A/B: http://localhost:${PORT}/demo/a/  i  http://localhost:${PORT}/demo/b/`);
-  console.log(`  Mózg: ${BRAIN === 'jev' ? `${JEV_LABEL} ${JEV_MODEL}` : 'LLM (czat)'}  |  Modele czatu: ${MODELS.join(' → ')}  |  limit: $${BUDGET}/przebieg  |  klucz: ${process.env.OPENROUTER_API_KEY ? 'OK' : 'BRAK (.env)'}\n`);
+  console.log(`  Mózg: ${BRAIN === 'jev' ? `${JEV_LABEL} ${jevModel()}` : 'LLM (czat)'}  |  Modele czatu: ${MODELS.join(' → ')}  |  limit: $${BUDGET}/przebieg  |  klucz: ${process.env.OPENROUTER_API_KEY ? 'OK' : 'BRAK (.env)'}\n`);
 });
 // Playwright przejmuje SIGTERM/SIGINT i bez tego proces potrafi wisieć po pierwszym przebiegu.
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => {

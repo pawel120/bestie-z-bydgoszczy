@@ -37,7 +37,7 @@ ostatnie kroki, tytuł strony, jej tekst i lista pól formularza, a pytania są 
 - `reason` (choice): kategoria powodu, gdyby persona odeszła teraz (cena, ukryte koszty, zaufanie, niejasna wartość…),
 - `mood` (score 1–5).
 
-Akcję **losujemy z rozkładu** zwróconego przez Jev (seedowany RNG per persona, ten sam w A i B), zamiast brać argmax.
+Akcję **losujemy z rozkładu** zwróconego przez Jev, wyostrzonego `p^1.5` i znormalizowanego (`HORDE_SHARPEN`), żeby linki z p≈0.02 rzadko wygrywały (seedowany RNG per persona, ten sam w A i B), zamiast brać argmax.
 Dzięki temu persony z podobnym rozkładem robią różne rzeczy, tak jak ludzie, a `p_leave` (prawdopodobieństwo odejścia
 na danym kroku) jest wprost mierzalne: kafelek pokazuje np. `→ klik „Wypróbuj za darmo” (p=0.72) · odejście p=0.08`,
 a wynik zapisuje per krok `{action, p, p_leave, top, mood}`.
@@ -55,6 +55,47 @@ przebieg demo 8 person × 2 warianty kosztuje ok. $0.006 (z czego większość t
 
 Stary mózg (model czatu zwraca JSON z akcjami) jest dostępny przez `HORDE_BRAIN=llm`. Twardy limit wydatków na
 przebieg (Jev + czat razem): `HORDE_BUDGET_USD`. Każdy przebieg zapisuje się do `runs/` (poza gitem).
+
+## Prawdziwe sesje, persony-bliźniaki i kalibracja
+
+Horda sama w sobie to symulacja. Żeby ją uziemić, demo nagrywa też **prawdziwe wizyty ludzi** (podobnie jak narzędzia
+odtwarzające prawdziwy ruch, np. Meticulous):
+
+- `demo-site/recorder.js` (bez zależności) jest na każdej stronie demo A i B. Na każdą odsłonę zapisuje: id sesji
+  (`sessionStorage`), wariant, krok, urządzenie (mobile < 700 px), czas na stronie, maks. głębokość przewinięcia,
+  kliknięcia, „rage clicks” (3+ kliknięcia w ten sam element w < 1 s), wejścia w pola formularza i czy to było wyjście.
+  Wysyła to przez `navigator.sendBeacon` na `POST /api/sessions`; serwer dopisuje do `runs/sessions.jsonl` (poza gitem).
+  Agenci hordy mają ustawione `window.__HORDE_AGENT`, więc ich ruch się nie nagrywa.
+- `GET /api/sessions` zwraca agregaty per wariant (liczba sesji, lejek, miejsce odpadnięcia, średni czas na kroku,
+  urządzenia), a `POST /api/sessions/clear` (przycisk „Wyczyść sesje”) czyści nagrania.
+- Domyślnie serwer słucha tylko na localhost. Żeby koledzy w tym samym Wi-Fi mogli klikać demo na telefonach, uruchom
+  `HORDE_HOST=0.0.0.0 npm start`: serwer wypisze adres w sieci lokalnej, a panel pokaże go z kodem QR.
+
+**Persony-bliźniaki** (checkbox „Persony z prawdziwych sesji”): gdy są nagrane sesje na A, każda persona dostaje
+urządzenie, cierpliwość (z liczby kroków i czasu sesji) i zdanie w prompcie w rodzaju „W prawdziwej sesji ta osoba:
+weszła z telefonu; start: 4 s, przewinęła 100%, kliknęła „Dowiedz się więcej”; cennik: 6 s; odpadła na: cennik”.
+Przy mniejszej liczbie sesji niż person sesje się powtarzają. Te same persony idą na B, więc projekt sparowany zostaje.
+Uwaga: bliźniak „zna” prawdziwą ścieżkę na A, więc jego wynik na A nie jest niezależnym sprawdzianem hordy.
+
+**Kalibracja** (sekcja „Kalibracja na prawdziwych ludziach”, gdy są sesje na A i jest przebieg hordy): dla każdego
+kroku lejka A liczymy prawdopodobieństwo przejścia dalej u ludzi i u hordy, z wygładzeniem Laplace'a
+`cont_k = (n_k + 1) / (n_{k-1} + 2)`, i współczynnik `c_k = cont_ludzie / cont_horda` (przycięty do 0,2–5).
+Te same współczynniki (po nazwie kroku; kroki, których nie ma na A albo bez danych, dostają 1) mnożą zasięg kroków
+hordy na B: zasięg_k(B) = surowy zasięg_k(B) × iloczyn c_j po krokach B do k. Panel pokazuje dla każdego kroku ludzi A,
+hordę A, surową hordę B i B po kalibracji, prognozę konwersji B przed/po oraz błąd hordy na A przed kalibracją
+(średni bezwzględny błąd zasięgu kroków w punktach procentowych).
+
+To ten sam pomysł co kalibracja Platta (Platt 1999, *Probabilistic Outputs for Support Vector Machines*): surowe
+wyjście modelu dopasowujemy do prawdziwych częstości na zbiorze z etykietami, tu po prostu per krok lejka.
+Ograniczenia: (1) przy kilku sesjach współczynniki są bardzo niepewne; (2) metoda zakłada, że błąd hordy na danym kroku
+przenosi się z A na B, a zmiana na B może zmienić właśnie zachowanie, którego dotyczy błąd; (3) LLM-y dobrze oddają
+kierunek zachowań grup, gorzej ich rozkład (Argyle i in. 2023, https://doi.org/10.1017/pan.2023.2), dlatego
+kalibrujemy rozkład na ludziach zamiast mu ufać.
+
+Test (tylko do sprawdzenia działania): 5 „prawdziwych” sesji na A wygenerowaliśmy zwykłym skryptem Playwright z ludzkimi
+opóźnieniami (nie agentem) i po teście usunęliśmy je z `sessions.jsonl`. Zrzut panelu: `docs/screenshot.png`.
+
+![Prawdziwe sesje i kalibracja](docs/screenshot.png)
 
 ## Dlaczego to nie jest „LLM zgaduje”
 
@@ -89,6 +130,8 @@ przed testem na prawdziwym ruchu, a nie jego zamiennikiem. Procenty konwersji z 
 - `lib/jev.js` – klient OpenRouter Decisions API (Jev) i losowanie z rozkładu
 - `lib/personas.js` – generator person z rozkładów z badań
 - `lib/stats.js` – lejek, Wilson, McNemar
+- `lib/sessions.js` – prawdziwe sesje: zapis, agregacja, persony-bliźniaki, kalibracja
+- `demo-site/recorder.js` – rejestrator sesji na stronach demo
 - `lib/llm.js` – klient OpenRouter z licznikiem kosztu i limitem budżetu
 - `public/index.html` – panel
 - `demo-site/a`, `demo-site/b` – dwa warianty demo landingu

@@ -1,12 +1,13 @@
 // Klient OpenRouter Decisions API dla Jev (TypeSafe). Jev nie pisze tekstu: na pytania typu choice/score/noul
 // o podany `state` zwraca rozkład prawdopodobieństwa. Koszt i budżet liczymy w tym samym liczniku co LLM.
 const URL_ = process.env.OPENROUTER_DECISIONS_URL || 'https://openrouter.ai/api/alpha/decisions';
-export const JEV_MODEL = process.env.HORDE_JEV_MODEL || '~typesafe/jev-latest';
+// Funkcja, nie stała: server.js wczytuje .env dopiero po importach.
+export const jevModel = () => process.env.HORDE_JEV_MODEL || '~typesafe/jev-latest';
 export const JEV_LABEL = 'Jev (decisions)';
 
 export class Jev {
   // meter: instancja LLM, której liczniki (spent, calls, tokeny, budżet) współdzielimy.
-  constructor({ key, meter, model = JEV_MODEL }) {
+  constructor({ key, meter, model = jevModel() }) {
     this.key = key;
     this.meter = meter;
     this.model = model;
@@ -62,8 +63,9 @@ export class Jev {
 }
 
 // Losowanie z rozkładu (zamiast argmax): różne persony z tym samym rozkładem robią różne rzeczy, jak ludzie.
-export function sample(probs, r) {
-  const entries = Object.entries(probs || {}).filter(([, p]) => p > 0);
+// Wyostrzenie p^k (HORDE_SHARPEN, domyślnie 1.5) sprawia, że opcje z p≈0.02 (np. linki w nawigacji) rzadko wygrywają.
+export function sample(probs, r, k = Number(process.env.HORDE_SHARPEN || 1.5)) {
+  const entries = Object.entries(probs || {}).filter(([, p]) => p > 0).map(([o, p]) => [o, Math.pow(p, k)]);
   const total = entries.reduce((a, [, p]) => a + p, 0);
   if (!total) return null;
   let x = r() * total;

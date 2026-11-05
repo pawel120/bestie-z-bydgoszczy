@@ -52,6 +52,7 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
     hasTouch: mobile,
     locale: 'pl-PL',
   });
+  await ctx.addInitScript(() => { window.__HORDE_AGENT = true; }); // nie nagrywaj agentów jako prawdziwych sesji
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e.message).slice(0, 100)));
@@ -217,7 +218,7 @@ const QUOTE_FALLBACK = {
   nuda: 'Nic mnie tu nie zatrzymało, zamykam.',
   inne: 'Nie przekonało mnie to.',
 };
-const QUOTE_MODELS = (process.env.HORDE_QUOTE_MODELS || 'openai/gpt-oss-120b,x-ai/grok-4-fast').split(',').map(s => s.trim()).filter(Boolean);
+const quoteModels = () => (process.env.HORDE_QUOTE_MODELS || 'openai/gpt-oss-120b,x-ai/grok-4-fast').split(',').map(s => s.trim()).filter(Boolean);
 
 const FILLABLE = e => (e.t === 'input' && !['submit', 'button', 'image', 'reset', 'file'].includes(e.type)) || e.t === 'select' || e.t === 'textarea';
 const CLICKABLE = e => ['a', 'button', 'summary'].includes(e.t) || (e.t === 'input' && ['submit', 'button'].includes(e.type)) || (!FILLABLE(e) && e.t !== 'input');
@@ -329,7 +330,7 @@ async function exitQuote(llm, persona, state, reason, stepName) {
   try {
     const d = await llm.json('Zwracasz tylko JSON: {"quote":"..."}. Jedno krótkie zdanie po polsku, potocznie, w 1. osobie.',
       `${personaPrompt(persona)}\nWłaśnie zamykasz stronę „${state.title}” (${stepName(state.url)}). Główny powód: ${REASONS[reason] || reason}.\nFragment strony: ${state.text.slice(0, 500)}\nCo wpiszesz w ankiecie wyjścia (max 20 słów)?`,
-      { maxTokens: 400, temperature: 0.9, models: QUOTE_MODELS, reasoning: { effort: 'low' } });
+      { maxTokens: 400, temperature: 0.9, models: quoteModels(), reasoning: { effort: 'low' } });
     const q = String(d.quote || '').trim();
     if (q) return q.slice(0, 200);
   } catch (e) {
