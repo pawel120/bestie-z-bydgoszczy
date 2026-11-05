@@ -13,6 +13,8 @@ interface Props {
   data: BoardData
   time: number
   selectedId: string | null
+  /** Karta, na którą ma najechać kamera — używane przez tryb prezentacji. */
+  focusId?: string | null
   onSelect: (id: string | null) => void
   onOpen: (id: string) => void
 }
@@ -28,7 +30,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-export function Canvas({ data, time, selectedId, onSelect, onOpen }: Props) {
+export function Canvas({ data, time, selectedId, focusId, onSelect, onOpen }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 1000, h: 700 })
   const [view, setView] = useState({ x: 0, y: 0, z: 0.62 })
@@ -49,22 +51,36 @@ export function Canvas({ data, time, selectedId, onSelect, onOpen }: Props) {
     return () => observer.disconnect()
   }, [])
 
-  // Kamera dojeżdża do karty, która właśnie powstała.
+  const focused = focusId ? data.nodes.find((n) => n.id === focusId) : null
+
+  // Prezentacja przejmuje kamerę: każdy przystanek znów ją podpina,
+  // nawet jeśli w międzyczasie ktoś przeciągnął kanwę.
   useEffect(() => {
-    if (!follow || !newest) return
-    const spot = placeOf(newest, world)
-    const target = {
-      x: size.w / 2 - (spot.left + spot.w / 2) * view.z,
-      y: size.h / 2 - (spot.top + spot.h / 2) * view.z,
-    }
+    if (focusId) setFollow(true)
+  }, [focusId])
+
+  // Kamera dojeżdża do wskazanej karty, a poza prezentacją — do tej,
+  // która właśnie powstała.
+  useEffect(() => {
+    const anchor = focused ?? newest
+    if (!follow || !anchor) return
+    const spot = placeOf(anchor, world)
+    const zoom = focused ? (focused.type === 'mock' ? 0.78 : 1) : null
     let frame = 0
     const step = () => {
-      setView((v) => ({ ...v, x: v.x + (target.x - v.x) * 0.08, y: v.y + (target.y - v.y) * 0.08 }))
+      setView((v) => {
+        const z = zoom === null ? v.z : v.z + (zoom - v.z) * 0.1
+        return {
+          z,
+          x: v.x + (size.w / 2 - (spot.left + spot.w / 2) * z - v.x) * 0.1,
+          y: v.y + (size.h / 2 - (spot.top + spot.h / 2) * z - v.y) * 0.1,
+        }
+      })
       frame = requestAnimationFrame(step)
     }
     frame = requestAnimationFrame(step)
     return () => cancelAnimationFrame(frame)
-  }, [follow, newest?.id, size.w, size.h, view.z])
+  }, [follow, focused?.id, newest?.id, size.w, size.h])
 
   const zoomBy = (factor: number) => {
     setView((v) => {
