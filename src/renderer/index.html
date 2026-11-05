@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' wss://api.elevenlabs.io; frame-src 'self' about: data:">
+  <title>Bestie</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="toolbar">
+    <button id="record" class="record"><i></i><span>Nagrywaj</span></button>
+    <span id="timer" class="timer">00:00</span>
+    <span class="spacer"></span>
+    <select id="language" title="Język transkrypcji">
+      <option value="auto">Auto</option>
+      <option value="pl">Polski</option>
+      <option value="en">English</option>
+    </select>
+    <button id="reveal" title="Pokaż nagrania">📁</button>
+    <details id="settings" class="settings">
+      <summary title="Ustawienia">⚙︎</summary>
+      <div class="settings-panel">
+        <label>Klucz API ElevenLabs
+          <input id="api-key" type="password" autocomplete="off" placeholder="sk_…">
+        </label>
+        <button id="save-key">Zapisz</button>
+        <p class="hint">Szyfrowany systemowo (Keychain / libsecret). <code>ELEVENLABS_API_KEY</code> ma pierwszeństwo.</p>
+      </div>
+    </details>
+  </header>
+  <main>
+    <section id="transcript" class="transcript"></section>
+  </main>
+  <footer id="status" class="status" hidden></footer>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
