@@ -1,6 +1,6 @@
 # bestie-z-bydgoszczy
 
-**Bestie** records meetings locally (your microphone plus system audio) and transcribes them live with ElevenLabs Scribe v2 Realtime. Next to the transcript is a **live whiteboard**: while you talk, AI on Groq draws mockups, user flows and idea cards and updates them as the discussion moves on.
+**Bestie** records meetings locally (your microphone plus system audio) and transcribes them live with ElevenLabs Scribe v2 Realtime. Next to the transcript is a **live whiteboard**: a Figma-like canvas where AI draws mockups, user flows and idea cards while you talk, and updates them as the discussion moves on.
 
 It runs on macOS and Linux (Electron + TypeScript).
 
@@ -8,7 +8,7 @@ It runs on macOS and Linux (Electron + TypeScript).
 
 ```bash
 npm install
-cp .env.example .env   # fill in ELEVENLABS_API_KEY and GROQ_API_KEY
+cp .env.example .env   # fill in ELEVENLABS_API_KEY, GROQ_API_KEY and optionally ANTHROPIC_API_KEY
 ```
 
 If `node_modules/electron/dist` is missing after `npm install`, run `node node_modules/electron/install.js`.
@@ -33,7 +33,15 @@ If system audio is unavailable, the app records the microphone only.
 ## How it works
 
 - Mic and system audio each get their own Scribe session, so the transcript labels speakers as **"Ja"** (you) and **"Rozmówcy"** (everyone else).
-- Whiteboard (`src/board.ts`): after every ~2 new utterances (or after 12 s), a planner (`openai/gpt-oss-120b`) decides which cards to add, change or remove. Each changed card is then drawn by a separate, parallel call that returns a self-contained HTML card (960×600). It renders in a sandboxed iframe with no scripts. You can swap the designer model with `BESTIE_DESIGNER_MODEL` (for example `qwen/qwen3.8-27b`).
+- Whiteboard (`src/board.ts`):
+  - It also sees what is being said right now (partials). A plan runs ~1.2 s after the last change in the conversation, and at least every 4 s while people keep talking.
+  - The planner (Groq `gpt-oss-120b`, ~2 s) decides which cards to add, change or remove. A card shows up immediately as a frame with its title.
+  - Each card's HTML streams into its frame. With `ANTHROPIC_API_KEY` set, Claude Opus 5.5 draws it in fast mode (~0.7 s to the first token, ~390 tok/s, much better design; roughly $0.15 per card). Without the key, the Groq model draws it (faster, weaker).
+  - Cards are written in Tailwind (compiled in the main process) and rendered in Shadow DOM after removing scripts and `on*` handlers.
+- The canvas works like Figma:
+  - pan by scrolling or dragging the background, zoom with a pinch or ⌘+scroll;
+  - move a frame by dragging its label, double-click to zoom into a frame;
+  - ⇧1 or "Dopasuj" fits everything, and "Śledź" follows new frames.
 - **"Wczytaj transkrypt"** replays a `[mm:ss] Speaker: text` file at ~20× speed. Use it to demo or backtest the whiteboard without recording.
 
 Each meeting is saved in `~/Documents/Bestie/<date time>/`:
