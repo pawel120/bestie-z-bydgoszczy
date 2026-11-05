@@ -314,15 +314,39 @@ main { flex: 1; min-height: 0; display: flex; }
   background: color-mix(in srgb, #ff9f43 14%, var(--surface)); border: 1px solid color-mix(in srgb, #ff9f43 40%, transparent);
 }
 .variant .horda-line { font-size: 16px; margin: 0 0 10px; }
-.horda-viewer {
-  width: 96vw; height: 92vh; max-width: none; max-height: none; padding: 0; border: 1px solid var(--border); border-radius: 16px;
-  background: #0b0d12; color: #e8ebf2; overflow: hidden; display: flex; flex-direction: column;
+/* Horda on the canvas: its live panel (1440 px wide) scaled into a two-column frame, starting at the persona tiles
+   (Bestie fills in Horda's own config form, so that part is cropped). */
+.horda-board { position: absolute; top: 0; left: 0; width: 2120px; }
+.horda-board .frame-label .kind { color: #ff9f43; }
+.horda-board.drawing .frame-label .live { display: inline-flex; }
+.horda-frame {
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; width: 2120px; min-height: 1160px; padding: 28px; align-items: start;
+  overflow: hidden; border-radius: 18px; background: #0b0d12; color: #e8ebf2; font-family: Inter, system-ui, sans-serif;
+  box-shadow: 0 0 0 calc(2px / var(--z)) #ff9f43, 0 calc(6px / var(--z)) calc(30px / var(--z)) rgba(0, 0, 0, .3);
 }
-.horda-viewer:not([open]) { display: none; }
-.horda-viewer::backdrop { background: rgba(5, 5, 8, .6); backdrop-filter: blur(4px); }
-.horda-viewer header { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-bottom: 1px solid #262b38; }
-.horda-title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.horda-result { flex: 1; color: #ffd43b; font: 600 13px ui-monospace, Menlo, monospace; }
-/* Horda's panel starts with its own config form; Bestie fills that in, so start the view at the persona tiles. */
-.horda-frame { position: relative; flex: 1; overflow: hidden; background: #0b0d12; }
-.horda-frame iframe { position: absolute; left: 0; top: -272px; width: 100%; height: calc(100% + 272px); border: 0; background: #0b0d12; }
+.horda-phase { grid-column: 1 / -1; margin: auto; font-size: 30px; color: #8a91a3; }
+.hcol { background: #12151d; border: 1px solid #262b38; border-radius: 18px; padding: 22px; overflow: hidden; }
+.hcolh { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.hvb { font-weight: 800; font-size: 22px; padding: 4px 14px; border-radius: 8px; color: #111; }
+.hA { background: #ff9f43; } .hB { background: #4dabf7; }
+.hurl { flex: 1; color: #8a91a3; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hbig { font-size: 52px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hbar { height: 10px; background: #181c26; border-radius: 6px; overflow: hidden; margin-bottom: 18px; }
+.hbar i { display: block; height: 100%; width: 0; background: #2fd27a; transition: width .4s; }
+.htiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.htile { background: #181c26; border: 3px solid #262b38; border-radius: 14px; overflow: hidden; position: relative; transition: border-color .2s; }
+.htile.thinking { border-color: #7c8cff; } .htile.acting { border-color: #ffd43b; }
+.htile.converted { border-color: #2fd27a; } .htile.left { border-color: #ff4d6d; opacity: .85; }
+.hshot { aspect-ratio: 16 / 10; background: #000 center / contain no-repeat; position: relative; }
+.hst { position: absolute; top: 8px; right: 8px; font-size: 15px; font-weight: 700; padding: 3px 9px; border-radius: 7px; background: #000a; }
+.htile.converted .hst { background: #2fd27a; color: #111; } .htile.left .hst { background: #ff4d6d; color: #fff; }
+.hdev { position: absolute; top: 8px; left: 8px; font-size: 16px; background: #000a; border-radius: 7px; padding: 2px 7px; }
+.hwho { padding: 10px 12px 0; font-size: 17px; } .hwho span { color: #8a91a3; }
+.hthink { padding: 4px 12px 10px; font-size: 16px; line-height: 1.35; color: #c6cbe0; min-height: 64px; max-height: 92px; overflow: hidden; }
+.hbad { color: #ff4d6d; } .hok { color: #2fd27a; }
+.hpath { padding: 0 12px 12px; font: 500 14px ui-monospace, Menlo, monospace; color: #8a91a3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.horda-status {
+  margin-top: 22px; padding: 16px 22px; border-radius: 16px; font: 600 26px Inter, system-ui, sans-serif; line-height: 1.4;
+  color: var(--text); background: color-mix(in srgb, #ff9f43 14%, var(--surface)); border: 1px solid color-mix(in srgb, #ff9f43 40%, transparent);
+}
+.links path.to-horda { stroke: #ff9f43; stroke-dasharray: 18 10; opacity: .7; }
