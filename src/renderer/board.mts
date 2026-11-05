@@ -3,7 +3,7 @@
 // left to right as the history of the conversation. Arrows show what each version grew out of, and every card
 // carries the quote it came from. Nothing ever moves on its own: cards are only added at the end or edited in place.
 
-import type { BestieApi } from "../preload.js";
+import type { BestieApi, HordaEvent } from "../preload.js";
 
 type Kind = "mockup" | "flow" | "idea";
 
@@ -53,6 +53,9 @@ const LANE_H = FRAME_H + 780;
 const VARIANT_W = 470;
 const VARIANT_SCALE = VARIANT_W / FRAME_W;
 const VARIANT_Y = FRAME_H + 330;
+/** Horda's frame on the canvas: two columns wide, Horda's panel (1440 px) scaled to fit. */
+const HORDA_W = FRAME_W * 2 + GAP_X;
+const HORDA_H = 1420;
 const CURSOR_COLORS = ["#0d99ff", "#f24e1e", "#14ae5c", "#9747ff", "#ffcd29"];
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 2;
@@ -195,6 +198,8 @@ export class Whiteboard {
   private followButton: HTMLButtonElement;
   private selected: Card | null = null;
   private variants = new Map<string, Variant>();
+  private hordaLinks: { from: Card; x: number; y: number }[] = [];
+  private hordaRuns = new Map<string, (ev: HordaEvent) => void>();
   private cursorCount = 0;
   /** Explorer agents draw variants of every new card (costs ~2 small edits per card). */
   explore = true;
@@ -219,6 +224,8 @@ export class Whiteboard {
       const variant = this.variants.get(id);
       if (variant) this.render(variant.shadow, html);
     });
+
+    api.onHordaEvent((runId, ev) => this.hordaRuns.get(runId)?.(ev));
 
     viewport.classList.add("canvas");
     this.world = document.createElement("div");
@@ -329,6 +336,8 @@ export class Whiteboard {
   reset() {
     for (const card of this.cards.values()) card.el.remove();
     for (const variant of this.variants.values()) variant.el.remove();
+    for (const el of this.world.querySelectorAll(".horda-board")) el.remove();
+    this.hordaLinks = [];
     this.variants.clear();
     for (const lane of this.lanes.values()) lane.el.remove();
     this.cards.clear();
@@ -686,52 +695,120 @@ export class Whiteboard {
     return from?.item.html ? { id: from.item.id, title: from.item.title, html: from.item.html } : null;
   }
 
+  /**
+   * Runs Horda on the canvas: a big frame next to the tested card (same lane, next column) where every persona's
+   * screen, thought and outcome appear live, side by side for A and B, then the result.
+   */
   private async testWithHorda(a: { id: string; title: string; html: string }, b: { id: string; title: string; html: string }, resultHost: HTMLElement) {
     if (!a.html || !b.html) return this.onError("Obie wersje muszą być gotowe, zanim horda je przetestuje.");
-    const dialog = document.createElement("dialog");
-    dialog.className = "horda-viewer";
-    const header = document.createElement("header");
-    const title = document.createElement("div");
-    title.className = "horda-title";
-    title.textContent = `🐝 Horda · A: ${a.title}  vs  B: ${b.title}`;
+    const tested = this.cards.get(b.id) ?? this.cards.get(b.id.split("~")[0]);
+    const lane = tested ? this.lanes.get(tested.item.thread) : [...this.lanes.values()][0];
+    const col = this.columns;
+    this.columns += 2; // the Horda frame is two columns wide
+    const x = col * (FRAME_W + GAP_X);
+    const y = lane ? lane.index * LANE_H : 0;
+
+    const el = document.createElement("section");
+    el.className = "horda-board drawing";
+    el.style.transform = `translate(${x}px, ${y}px)`;
+    const label = document.createElement("header");
+    label.className = "frame-label";
+    label.innerHTML = `<span class="kind">🐝 Horda</span><span class="title"></span><span class="live">persony klikają</span>`;
+    label.querySelector(".title")!.textContent = `A: ${a.title} · B: ${b.title}`;
+    const grid = document.createElement("div");
+    grid.className = "horda-frame";
+    grid.innerHTML = `<p class="horda-phase">Uruchamiam hordę…</p>`;
     const result = document.createElement("div");
-    result.className = "horda-result";
+    result.className = "horda-status";
     result.textContent = "Uruchamiam hordę…";
-    const close = document.createElement("button");
-    close.className = "ghost";
-    close.textContent = "Zamknij";
-    close.addEventListener("click", () => dialog.close());
-    header.append(title, result, close);
-    dialog.append(header);
-    dialog.addEventListener("close", () => dialog.remove());
-    document.body.append(dialog);
-    dialog.showModal();
+    el.append(label, grid, result);
+    this.world.append(el);
+    this.layoutLanes();
+    const tick = document.createElement("span");
+    tick.className = "tick";
+    tick.style.transform = `translateX(${x}px)`;
+    tick.textContent = "Horda";
+    this.ruler.append(tick);
+    if (tested) this.hordaLinks.push({ from: tested, x, y });
+    this.drawLinks();
+    if (this.follow) this.fitRect(x - 80, y - 200, x + HORDA_W + 80, y + HORDA_H + 160, true);
+
+    const runId = `${b.id}-${Date.now()}`;
+    this.hordaRuns.set(runId, (ev) => this.onHordaEvent(grid, result, { A: a.title, B: b.title }, ev));
     const cursor = this.cursor("Horda");
+    cursor.work({ x, y, w: HORDA_W, h: HORDA_H }, "wypuszcza persony…");
     try {
-      const url = await this.api.prepareHorda();
-      const wrap = document.createElement("div");
-      wrap.className = "horda-frame";
-      const frame = document.createElement("iframe");
-      frame.src = url;
-      wrap.append(frame);
-      dialog.append(wrap);
-      // Let Horda's panel connect to its event stream before the run starts, so it shows every persona.
-      await new Promise((r) => frame.addEventListener("load", r, { once: true }));
-      await new Promise((r) => setTimeout(r, 600));
-      result.textContent = "Persony klikają…";
-      const res = await this.api.runHorda({ id: a.id, html: a.html }, { id: b.id, html: b.html }, 12);
+      const res = await this.api.runHorda(runId, { id: a.id, html: a.html }, { id: b.id, html: b.html }, 12);
       const summary = `🐝 Horda: A ${res.conv.A} → B ${res.conv.B}${res.pValue != null ? ` · p=${res.pValue.toFixed(2)}` : ""}`;
-      result.textContent = summary;
+      result.textContent = `${summary}${res.headline ? ` — ${res.headline}` : ""}`;
       const line = document.createElement("p");
       line.className = "horda-line";
-      line.textContent = `${summary}${res.headline ? ` — ${res.headline}` : ""}`;
+      line.textContent = summary;
       resultHost.after(line);
     } catch (err) {
       result.textContent = String(err);
       this.onError(String(err));
     } finally {
+      this.hordaRuns.delete(runId);
+      el.classList.remove("drawing");
       cursor.done();
     }
+  }
+
+  /** Native rendering of Horda's live view (same tiles as its own panel): one column per variant. */
+  private onHordaEvent(grid: HTMLElement, result: HTMLElement, titles: Record<string, string>, ev: HordaEvent) {
+    const STATUS: Record<string, string> = { loading: "wchodzi", thinking: "myśli…", acting: "klika", converted: "✓ konwersja", left: "✗ wyszedł" };
+    const REASON: Record<string, string> = {
+      cena: "za drogo", ukryte_koszty: "ukryte koszty", zaufanie: "brak zaufania", niejasna_wartosc: "nie wiem, co to jest",
+      za_dlugi_formularz: "za długi formularz", wymuszone_konto: "wymuszone konto", nie_dziala: "coś nie działa", nuda: "znudził się",
+    };
+    if (ev.type === "phase" && ev.text) {
+      result.textContent = ev.text;
+      return;
+    }
+    if (ev.type === "start" && ev.personas && ev.variants) {
+      grid.replaceChildren();
+      for (const v of Object.keys(ev.variants)) {
+        const col = document.createElement("div");
+        col.className = "hcol";
+        col.dataset.variant = v;
+        col.innerHTML = `<div class="hcolh"><span class="hvb h${v}">${v}</span><span class="hurl"></span><span class="hbig">0/${ev.personas.length}</span></div><div class="hbar"><i></i></div><div class="htiles"></div>`;
+        col.querySelector(".hurl")!.textContent = titles[v] ?? "";
+        const tiles = col.querySelector(".htiles")!;
+        for (const p of ev.personas) {
+          const t = document.createElement("div");
+          t.className = "htile";
+          t.dataset.persona = p.id;
+          t.innerHTML = `<div class="hshot"><span class="hdev">${p.device === "mobile" ? "📱" : "💻"}</span><span class="hst">czeka</span></div><div class="hwho"><b></b> <span></span></div><div class="hthink"></div><div class="hpath"></div>`;
+          t.querySelector(".hwho b")!.textContent = `${p.name}, ${p.age}`;
+          t.querySelector(".hwho span")!.textContent = `· ${p.role.slice(0, 48)}`;
+          tiles.append(t);
+        }
+        grid.append(col);
+      }
+      result.textContent = `${ev.personas.length} person × ${Object.keys(ev.variants).length} warianty klikają…`;
+      return;
+    }
+    if (ev.type !== "agent" || !ev.variant || !ev.personaId) return;
+    const col = grid.querySelector<HTMLElement>(`.hcol[data-variant="${ev.variant}"]`);
+    const t = col?.querySelector<HTMLElement>(`.htile[data-persona="${ev.personaId}"]`);
+    if (!col || !t) return;
+    t.className = `htile ${ev.status ?? ""}`;
+    t.querySelector(".hst")!.textContent = STATUS[ev.status ?? ""] ?? ev.status ?? "";
+    if (ev.shot) (t.querySelector(".hshot") as HTMLElement).style.backgroundImage = `url(data:image/jpeg;base64,${ev.shot})`;
+    const think = t.querySelector(".hthink") as HTMLElement;
+    if (ev.status === "left" && ev.quote) {
+      think.innerHTML = `<b class="hbad"></b> <span></span>`;
+      think.querySelector("b")!.textContent = `${REASON[ev.reason ?? ""] ?? ev.reason ?? "wyszedł"}:`;
+      think.querySelector("span")!.textContent = `„${ev.quote}”`;
+    } else if (ev.status === "converted") think.innerHTML = `<b class="hok">Skonwertował(a)!</b>`;
+    else if (ev.think) think.textContent = `💭 ${ev.think}`;
+    t.querySelector(".hpath")!.textContent = (ev.path ?? []).join(" → ");
+    // Live counter and bar per variant.
+    const all = col.querySelectorAll(".htile").length;
+    const conv = col.querySelectorAll(".htile.converted").length;
+    col.querySelector(".hbig")!.textContent = `${conv}/${all}`;
+    (col.querySelector(".hbar i") as HTMLElement).style.width = `${(100 * conv) / all}%`;
   }
 
   // MARK: - Agent cursors
@@ -864,6 +941,14 @@ export class Whiteboard {
       const y1 = card.y + FRAME_H / 2;
       const dx = Math.max(80, (x1 - x0) / 2);
       paths.push(`<path d="M${x0} ${y0} C${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}" marker-end="url(#arrow)"/>`);
+    }
+    for (const h of this.hordaLinks) {
+      const x0 = h.from.x + FRAME_W;
+      const y0 = h.from.y + FRAME_H / 2;
+      const x1 = h.x - 14;
+      const y1 = h.y + FRAME_H / 2;
+      const dx = Math.max(80, (x1 - x0) / 2);
+      paths.push(`<path class="to-horda" d="M${x0} ${y0} C${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}" marker-end="url(#arrow)"/>`);
     }
     // Every thread starts from the base product: solid for versions of the product itself, dashed for other ideas.
     if (this.product) {

@@ -1,6 +1,7 @@
 // Bridge to Horda (../horda): a swarm of Jev-driven personas that click through two variants in a real browser.
-// Bestie serves the two cards as pages, starts the Horda server if needed and kicks off an A/B run; Horda's own
-// panel (embedded in the app) shows the personas live. Nothing in horda/ is modified.
+// Bestie serves the two cards as pages, starts the Horda server if needed, kicks off an A/B run and forwards Horda's
+// live events (personas, their screens, thoughts, results), which the board renders natively on the canvas.
+// Nothing in horda/ is modified.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import http from "node:http";
@@ -99,7 +100,10 @@ export interface HordaResult {
 }
 
 /** Runs an A/B test and resolves when Horda is done (its panel shows the run live meanwhile). */
-export async function runHorda(cfg: { urlA: string; urlB: string; goal: string; audience: string; agents: number }): Promise<HordaResult> {
+export async function runHorda(
+  cfg: { urlA: string; urlB: string; goal: string; audience: string; agents: number },
+  onEvent: (ev: { type: string }) => void,
+): Promise<HordaResult> {
   // Listen before starting, so the "done" event cannot be missed.
   const events = await fetch(`${HORDA_URL}/api/events`);
   const reader = events.body!.pipeThrough(new TextDecoderStream()).getReader();
@@ -123,6 +127,7 @@ export async function runHorda(cfg: { urlA: string; urlB: string; goal: string; 
         if (!chunk.startsWith("data: ")) continue;
         const ev = JSON.parse(chunk.slice(6));
         if (ev.type === "error") throw new Error(`Horda: ${ev.text}`);
+        if (["start", "agent", "phase", "done"].includes(ev.type)) onEvent(ev);
         if (ev.type !== "done") continue;
         const s = ev.summary;
         const conv = (v: string) => (s.variants?.[v] ? `${s.variants[v].conv}/${s.variants[v].n}` : "–");

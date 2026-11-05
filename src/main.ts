@@ -3,7 +3,7 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { addHordaCost, boardToHtml, currentProduct, designCard, gateBoard, planBoard, replicateProduct, resetCosts, setProduct, watchCosts, type BoardItem, type CardMeta, type PlanOp } from "./board";
-import { DEFAULT_GOAL, ensureHorda, HORDA_URL, publishCard, runHorda, stopHorda } from "./horda";
+import { DEFAULT_GOAL, ensureHorda, publishCard, runHorda, stopHorda } from "./horda";
 import { loadProduct } from "./product";
 
 // Dev convenience: load API keys from a gitignored .env next to package.json (packaged builds use Settings).
@@ -169,30 +169,29 @@ function registerIpc() {
   });
   ipcMain.handle("costs:reset", () => resetCosts());
 
-  // Horda: personas driven by Jev click through two cards in a real browser. First make sure it runs (the renderer
-  // then shows Horda's live panel), then start the A/B run and wait for the result.
-  ipcMain.handle("horda:prepare", async () => {
-    const key = await getApiKey("openrouter");
-    if (!key) throw new Error("Horda potrzebuje klucza OpenRouter (ustawienia).");
-    await ensureHorda(key);
-    return HORDA_URL;
-  });
+  // Horda: personas driven by Jev click through two cards in a real browser; its live events are forwarded to the
+  // board, which draws the persona screens on the canvas.
   ipcMain.handle(
     "horda:run",
-    async (_e, a: { id: string; html: string }, b: { id: string; html: string }, agents: number) => {
+    async (e, runId: string, a: { id: string; html: string }, b: { id: string; html: string }, agents: number) => {
+      const key = await getApiKey("openrouter");
+      if (!key) throw new Error("Horda potrzebuje klucza OpenRouter (ustawienia).");
+      await ensureHorda(key);
       const product = currentProduct();
-      const result = await runHorda({
-        urlA: publishCard(`${a.id}-A`, a.html),
-        urlB: publishCard(`${b.id}-B`, b.html),
-        goal: DEFAULT_GOAL,
-        audience: product ? `${product.title}. ${product.description}` : "",
-        agents,
-      });
+      const result = await runHorda(
+        {
+          urlA: publishCard(`${a.id}-A`, a.html),
+          urlB: publishCard(`${b.id}-B`, b.html),
+          goal: DEFAULT_GOAL,
+          audience: product ? `${product.title}. ${product.description}` : "",
+          agents,
+        },
+        (ev) => !e.sender.isDestroyed() && e.sender.send("horda:event", runId, ev),
+      );
       addHordaCost(result.cost);
       return result;
     },
   );
-
   ipcMain.handle("board:save", async (_e, board: BoardItem[]) => {
     if (!currentFolder) return;
     await writeFile(path.join(currentFolder, "tablica.json"), JSON.stringify(board, null, 2));

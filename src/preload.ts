@@ -35,16 +35,35 @@ const api = {
     ipcRenderer.on("costs", (_e, costs: Costs) => listener(costs));
   },
   resetCosts: (): Promise<void> => ipcRenderer.invoke("costs:reset"),
-  /** Starts Horda if needed; resolves with the URL of its live panel. */
-  prepareHorda: (): Promise<string> => ipcRenderer.invoke("horda:prepare"),
+  /** Runs Horda on two cards; live events arrive through onHordaEvent with the same runId. */
   runHorda: (
+    runId: string,
     a: { id: string; html: string },
     b: { id: string; html: string },
     agents: number,
   ): Promise<{ conv: { A: string; B: string }; headline: string; pValue: number | null; cost: number }> =>
-    ipcRenderer.invoke("horda:run", a, b, agents),
+    ipcRenderer.invoke("horda:run", runId, a, b, agents),
+  onHordaEvent: (listener: (runId: string, ev: HordaEvent) => void) => {
+    ipcRenderer.on("horda:event", (_e, runId: string, ev: HordaEvent) => listener(runId, ev));
+  },
   saveBoard: (board: BoardItem[]): Promise<void> => ipcRenderer.invoke("board:save", board),
 };
+
+/** Horda's live events (see horda/server.js and horda/lib/agent.js). */
+export interface HordaEvent {
+  type: "start" | "agent" | "phase" | "done";
+  text?: string;
+  personas?: { id: string; name: string; age: number; role: string; device: string }[];
+  variants?: Record<string, string>;
+  variant?: string;
+  personaId?: string;
+  status?: string;
+  shot?: string;
+  think?: string;
+  quote?: string;
+  reason?: string;
+  path?: string[];
+}
 
 export type BestieApi = typeof api;
 
