@@ -26,10 +26,35 @@ npm start                         # http://localhost:3333
 Domyślnie panel ma wpisane dwa warianty demo (`/demo/a/` i `/demo/b/`) fikcyjnej apki do faktur „Fakturix”
 i cel „URL zawiera `sukces`”. Można wpisać dowolny URL (np. apki innych drużyn z hackathonu).
 
-Model: `typesafe/jev-router` (Jev Router, działa na `~typesafe/jev-latest`; sam `jev-latest` to model „decisions” i nie
-obsługuje `/chat/completions`) przez OpenRouter, z automatycznym przełączeniem na `x-ai/grok-4-fast` i
-`openai/gpt-oss-120b` przy błędzie (`HORDE_MODELS` w `.env`). Twardy limit wydatków na przebieg: `HORDE_BUDGET_USD`.
-Każdy przebieg zapisuje się do `runs/` (poza gitem).
+## Mózg agentów: Jev (decyzje z rozkładem prawdopodobieństwa)
+
+Domyślnie (`HORDE_BRAIN=jev`) o każdym kroku agenta decyduje **Jev** (`~typesafe/jev-latest`, TypeSafe) przez
+OpenRouter Decisions API (`POST /api/alpha/decisions`). Jeden krok = jedno żądanie: w `state` idzie opis persony,
+ostatnie kroki, tytuł strony, jej tekst i lista pól formularza, a pytania są typowane:
+
+- `action` (choice): `leave` (persona zamyka kartę teraz), `scroll`, `fill_form` (tylko gdy są pola) i po jednej opcji
+  `el_<id>` na każdy klikalny link/przycisk (opis = jego tekst, maks. 60),
+- `reason` (choice): kategoria powodu, gdyby persona odeszła teraz (cena, ukryte koszty, zaufanie, niejasna wartość…),
+- `mood` (score 1–5).
+
+Akcję **losujemy z rozkładu** zwróconego przez Jev (seedowany RNG per persona, ten sam w A i B), zamiast brać argmax.
+Dzięki temu persony z podobnym rozkładem robią różne rzeczy, tak jak ludzie, a `p_leave` (prawdopodobieństwo odejścia
+na danym kroku) jest wprost mierzalne: kafelek pokazuje np. `→ klik „Wypróbuj za darmo” (p=0.72) · odejście p=0.08`,
+a wynik zapisuje per krok `{action, p, p_leave, top, mood}`.
+
+Jev nie pisze tekstu, więc:
+- formularze wypełniamy deterministycznie danymi persony po typie/etykiecie pola (e-mail `imie.N@example.com`, NIP,
+  telefon, hasło spełniające silne reguły, karta testowa 4242…, 2. opcja selecta, wymagane zgody) i klikamy „wyślij”,
+- cytat z ankiety wyjścia pisze jedno krótkie wywołanie taniego modelu czatu (`HORDE_QUOTE_MODELS`, domyślnie
+  `openai/gpt-oss-120b`), a gdy się nie uda, bierzemy szablon dla danego powodu,
+- podsumowanie analityka i persony z opisu grupy docelowej nadal robi model czatu (`HORDE_MODELS`).
+
+**Dlaczego Jev:** zamiast wolnego tekstu i parsowania JSON-a dostajemy skalibrowane prawdopodobieństwa, które da się
+uśredniać, porównywać między wariantami i z których można losować. Jev liczy tylko tokeny wejściowe, więc jest tani:
+przebieg demo 8 person × 2 warianty kosztuje ok. $0.006 (z czego większość to cytaty i podsumowanie) i trwa ok. 10 s.
+
+Stary mózg (model czatu zwraca JSON z akcjami) jest dostępny przez `HORDE_BRAIN=llm`. Twardy limit wydatków na
+przebieg (Jev + czat razem): `HORDE_BUDGET_USD`. Każdy przebieg zapisuje się do `runs/` (poza gitem).
 
 ## Dlaczego to nie jest „LLM zgaduje”
 
@@ -60,7 +85,8 @@ przed testem na prawdziwym ruchu, a nie jego zamiennikiem. Procenty konwersji z 
 ## Struktura
 
 - `server.js` – serwer HTTP, SSE z podglądem na żywo, orkiestracja przebiegu
-- `lib/agent.js` – pętla agenta: ekstrakcja elementów strony → decyzja LLM (JSON) → akcje Playwright
+- `lib/agent.js` – pętla agenta: ekstrakcja elementów strony → decyzja (Jev albo LLM) → akcje Playwright
+- `lib/jev.js` – klient OpenRouter Decisions API (Jev) i losowanie z rozkładu
 - `lib/personas.js` – generator person z rozkładów z badań
 - `lib/stats.js` – lejek, Wilson, McNemar
 - `lib/llm.js` – klient OpenRouter z licznikiem kosztu i limitem budżetu

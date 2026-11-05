@@ -45,11 +45,13 @@ export function summarize(allResults, personas) {
       (orderScore[s] ||= []).push(i);
     });
     const moods = rs.flatMap(r => r.moods);
+    const pl = rs.flatMap(r => (r.decisions || []).map(d => d.p_leave)).filter(x => typeof x === 'number');
     out.variants[v] = {
       n: rs.length, conv, incomplete: allResults.filter(r => r.variant === v).length - rs.length, rate: rs.length ? conv / rs.length : 0, ci: wilson(conv, rs.length),
       reasons, reached,
       avgSteps: rs.reduce((a, r) => a + r.steps, 0) / (rs.length || 1),
       avgMood: moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : null,
+      avgPLeave: pl.length ? pl.reduce((a, b) => a + b, 0) / pl.length : null,
       quotes: rs.filter(r => r.quote).map(r => ({ personaId: r.personaId, reason: r.reason, quote: r.quote, lastStep: r.path[r.path.length - 1], converted: r.converted })),
     };
   }

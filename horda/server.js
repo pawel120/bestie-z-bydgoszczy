@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { LLM } from './lib/llm.js';
+import { Jev, JEV_LABEL, JEV_MODEL } from './lib/jev.js';
 import { makePersonas } from './lib/personas.js';
 import { runAgent } from './lib/agent.js';
 import { summarize } from './lib/stats.js';
@@ -21,6 +22,10 @@ const PORT = Number(process.env.PORT || 3333);
 const MODELS = (process.env.HORDE_MODELS || 'typesafe/jev-router,x-ai/grok-4-fast,openai/gpt-oss-120b').split(',').map(s => s.trim()).filter(Boolean);
 const BUDGET = Number(process.env.HORDE_BUDGET_USD || 0.15);
 const CONCURRENCY = Number(process.env.HORDE_CONCURRENCY || 8);
+// Mózg agentów: jev = OpenRouter Decisions (rozkład prawdopodobieństwa akcji), llm = stary agent czatowy (JSON).
+const BRAIN = (process.env.HORDE_BRAIN || 'jev').toLowerCase() === 'llm' ? 'llm' : 'jev';
+const BRAIN_MODELS = BRAIN === 'jev' ? [JEV_LABEL, ...MODELS] : MODELS;
+const modelLabel = llm => BRAIN === 'jev' ? JEV_LABEL : llm.lastModel;
 
 const clients = new Set();
 let current = null; // { abort, llm, started }
@@ -69,7 +74,7 @@ async function personaRoles(llm, audience, n) {
 async function insight(llm, summary, variantsCfg) {
   const compact = {
     warianty: Object.fromEntries(Object.entries(summary.variants).map(([v, s]) => [v, {
-      url: variantsCfg[v], konwersja: `${s.conv}/${s.n}`, powody_odejscia: s.reasons, sr_krokow: +s.avgSteps.toFixed(1),
+      url: variantsCfg[v], konwersja: `${s.conv}/${s.n}`, powody_odejscia: s.reasons, sr_krokow: +s.avgSteps.toFixed(1), sr_p_odejscia_na_krok: s.avgPLeave == null ? undefined : +s.avgPLeave.toFixed(2),
       cytaty: s.quotes.filter(q => !q.converted).slice(0, 6).map(q => `[${q.lastStep}] ${q.quote}`),
     }])),
     lejek: summary.funnel, test_par: summary.paired,
@@ -86,28 +91,29 @@ async function startRun(cfg) {
   const key = cfg.key || process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error('Brak OPENROUTER_API_KEY (ustaw w .env albo wpisz w panelu).');
   const llm = new LLM({ key, models: MODELS, budgetUsd: Math.min(Number(cfg.budget) || BUDGET, 1) });
+  const jev = BRAIN === 'jev' ? new Jev({ key, meter: llm }) : null;
   const abort = new AbortController();
   current = { abort, llm, started: Date.now() };
   const variants = { A: cfg.urlA };
   if (cfg.urlB) variants.B = cfg.urlB;
   const n = Math.max(1, Math.min(Number(cfg.agents) || 8, 30));
   const goal = { url: cfg.goalUrl || '', text: cfg.goalText || '' };
-  const ticker = setInterval(() => emit({ type: 'cost', spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: llm.lastModel, elapsed: Date.now() - current.started }), 500);
+  const ticker = setInterval(() => emit({ type: 'cost', spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: modelLabel(llm), elapsed: Date.now() - current.started }), 500);
   try {
     emit({ type: 'phase', text: cfg.audience ? 'Generuję persony z opisu grupy docelowej…' : 'Losuję persony…' });
     const roles = await personaRoles(llm, cfg.audience, n);
     const personas = makePersonas(n, Number(cfg.seed) || Date.now() % 100000, roles);
-    emit({ type: 'start', personas, variants, goal, models: MODELS, budget: llm.budgetUsd });
+    emit({ type: 'start', personas, variants, goal, models: BRAIN_MODELS, brain: BRAIN, budget: llm.budgetUsd });
     const browser = await getBrowser();
     const jobs = [];
     // Przeplatamy A i B, żeby oba warianty szły równolegle na podglądzie.
     for (const p of personas) for (const v of Object.keys(variants)) jobs.push({ p, v });
     const results = await pool(jobs, CONCURRENCY, ({ p, v }) =>
-      runAgent({ browser, persona: p, variant: v, startUrl: variants[v], goal, llm, emit, signal: abort.signal }));
+      runAgent({ browser, persona: p, variant: v, startUrl: variants[v], goal, llm, jev, emit, signal: abort.signal }));
     const summary = summarize(results, personas);
     emit({ type: 'phase', text: 'Analityk podsumowuje wyniki…' });
     summary.insight = await insight(llm, summary, variants);
-    summary.cost = { spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: llm.lastModel, servedBy: llm.servedBy, ms: Date.now() - current.started };
+    summary.cost = { spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: modelLabel(llm), brain: BRAIN, servedBy: llm.servedBy, ms: Date.now() - current.started };
     lastRun = { cfg: { ...cfg, key: undefined }, personas, results, summary, at: new Date().toISOString() };
     try {
       fs.mkdirSync(path.join(ROOT, 'runs'), { recursive: true });
@@ -118,7 +124,7 @@ async function startRun(cfg) {
     emit({ type: 'error', text: String(e.message || e) });
   } finally {
     clearInterval(ticker);
-    emit({ type: 'cost', spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: llm.lastModel, elapsed: Date.now() - current.started });
+    emit({ type: 'cost', spent: llm.spent, calls: llm.calls, tokensIn: llm.tokensIn, tokensOut: llm.tokensOut, model: modelLabel(llm), elapsed: Date.now() - current.started });
     current = null;
   }
 }
@@ -138,7 +144,7 @@ const server = http.createServer(async (req, res) => {
   const u = new URL(req.url, `http://${req.headers.host}`);
   if (u.pathname === '/api/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`data: ${JSON.stringify({ type: 'hello', running: !!current, hasKey: !!process.env.OPENROUTER_API_KEY, models: MODELS, lastRun: lastRun ? { summary: lastRun.summary } : null })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'hello', running: !!current, hasKey: !!process.env.OPENROUTER_API_KEY, models: BRAIN_MODELS, lastRun: lastRun ? { summary: lastRun.summary } : null })}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -170,7 +176,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`\n  🐝 Horda działa: http://localhost:${PORT}`);
   console.log(`  Demo A/B: http://localhost:${PORT}/demo/a/  i  http://localhost:${PORT}/demo/b/`);
-  console.log(`  Modele: ${MODELS.join(' → ')}  |  limit: $${BUDGET}/przebieg  |  klucz: ${process.env.OPENROUTER_API_KEY ? 'OK' : 'BRAK (.env)'}\n`);
+  console.log(`  Mózg: ${BRAIN === 'jev' ? `${JEV_LABEL} ${JEV_MODEL}` : 'LLM (czat)'}  |  Modele czatu: ${MODELS.join(' → ')}  |  limit: $${BUDGET}/przebieg  |  klucz: ${process.env.OPENROUTER_API_KEY ? 'OK' : 'BRAK (.env)'}\n`);
 });
 // Playwright przejmuje SIGTERM/SIGINT i bez tego proces potrafi wisieć po pierwszym przebiegu.
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => {

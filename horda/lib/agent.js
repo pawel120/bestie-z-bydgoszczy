@@ -120,7 +120,7 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
         send({ status: 'left', think, quote: result.quote, reason: result.reason, mood: d.mood, p_leave: pl, shot: await shot() });
         break;
       }
-      const actions = Array.isArray(d.actions) ? d.actions.slice(0, 12) : [];
+      const actions = Array.isArray(d.actions) ? d.actions.slice(0, 20) : [];
       const done = [];
       // Pokaż, gdzie agent "patrzy", zanim kliknie (do podglądu na żywo).
       const firstClick = actions.find(a => a.do === 'click');
@@ -267,17 +267,20 @@ async function decideJev({ jev, llm, persona, state, memory, steps, r, stepName 
   const pLeave = probs.leave ?? 0;
   const mood = typeof answers.mood?.score === 'number' ? +(answers.mood.score + 1).toFixed(2) : null;
   const tail = `(p=${p.toFixed(2)}) · odejście p=${pLeave.toFixed(2)}`;
-  const meta = { action, p: +p.toFixed(3), p_leave: +pLeave.toFixed(3) };
+  const top = argmax(probs);
+  const meta = { action, p: +p.toFixed(3), p_leave: +pLeave.toFixed(3), top, p_top: +(probs[top] ?? 0).toFixed(3) };
   if (action === 'leave') {
     const reason = argmax(answers.reason?.probabilities) || 'inne';
     const quote = await exitQuote(llm, persona, state, reason, stepName);
-    return { think: `→ wychodzę ${tail}`, mood, actions: [], leave: { reason, quote }, meta: { ...meta, reason, label: 'zamknęła kartę' } };
+    return { think: `→ wychodzę ${tail}`, mood, actions: [], leave: { reason, quote }, meta: { ...meta, reason, label: 'zamknięcie karty' } };
   }
-  if (action === 'scroll') return { think: `→ przewijam ${tail}`, mood, actions: [{ do: 'scroll' }], meta: { ...meta, label: 'przewinęła' } };
-  if (action === 'fill_form') return { think: `→ wypełniam formularz (${fields.length} pól) ${tail}`, mood, actions: fillForm(state.els, persona), meta: { ...meta, label: 'wypełniła formularz i wysłała' } };
+  if (action === 'scroll') return { think: `→ przewijam ${tail}`, mood, actions: [{ do: 'scroll' }], meta: { ...meta, label: 'przewinięcie' } };
+  if (action === 'fill_form') return { think: `→ wypełniam formularz (${fields.length} pól) ${tail}`, mood, actions: fillForm(state.els, persona), meta: { ...meta, label: 'wypełnienie i wysłanie formularza' } };
   const id = Number(action.slice(3));
   const el = state.els.find(e => e.id === id);
-  return { think: `→ klik „${elLabel(el || {})}” ${tail}`, mood, actions: [{ do: 'click', id }], meta: { ...meta, label: `kliknęła „${elLabel(el || {})}”` } };
+  // Klik w „wyślij” formularza z pustymi polami = człowiek najpierw wypełnia formularz.
+  if (el?.submit && fields.some(f => f.form === el.form)) return { think: `→ wypełniam i klikam „${elLabel(el)}” ${tail}`, mood, actions: fillForm(state.els, persona), meta: { ...meta, label: `wypełnienie formularza i klik „${elLabel(el)}”` } };
+  return { think: `→ klik „${elLabel(el || {})}” ${tail}`, mood, actions: [{ do: 'click', id }], meta: { ...meta, label: `klik „${elLabel(el || {})}”` } };
 }
 
 const SURNAMES = ['Nowak', 'Kowalska', 'Wiśniewski', 'Wójcik', 'Kamińska', 'Lewandowski', 'Zielińska', 'Szymański'];
@@ -326,7 +329,7 @@ async function exitQuote(llm, persona, state, reason, stepName) {
   try {
     const d = await llm.json('Zwracasz tylko JSON: {"quote":"..."}. Jedno krótkie zdanie po polsku, potocznie, w 1. osobie.',
       `${personaPrompt(persona)}\nWłaśnie zamykasz stronę „${state.title}” (${stepName(state.url)}). Główny powód: ${REASONS[reason] || reason}.\nFragment strony: ${state.text.slice(0, 500)}\nCo wpiszesz w ankiecie wyjścia (max 20 słów)?`,
-      { maxTokens: 400, temperature: 0.9, models: QUOTE_MODELS });
+      { maxTokens: 400, temperature: 0.9, models: QUOTE_MODELS, reasoning: { effort: 'low' } });
     const q = String(d.quote || '').trim();
     if (q) return q.slice(0, 200);
   } catch (e) {

@@ -22,14 +22,14 @@ export class LLM {
 
   // final: jedno podsumowanie analityka na koniec przebiegu, wykonywane zawsze, nawet po wyczerpaniu limitu.
   // models: nadpisanie listy modeli dla jednego wywołania (np. tani model do cytatu z ankiety wyjścia).
-  async json(system, user, { maxTokens = 300, temperature = 0.8, final = false, models = null } = {}) {
+  async json(system, user, { maxTokens = 300, temperature = 0.8, final = false, models = null, reasoning = null } = {}) {
     if (!final && this.overBudget) throw new Error('BUDGET');
     this.inFlight++;
-    try { return await this.#json(system, user, maxTokens, temperature, models); }
+    try { return await this.#json(system, user, maxTokens, temperature, models, reasoning); }
     finally { this.inFlight--; }
   }
 
-  async #json(system, user, maxTokens, temperature, override) {
+  async #json(system, user, maxTokens, temperature, override, reasoning) {
     const body = () => ({
       model: (override || this.models)[0],
       models: (override || this.models).slice(0, 3),
@@ -37,7 +37,7 @@ export class LLM {
       max_tokens: maxTokens,
       temperature,
       response_format: { type: 'json_object' },
-      reasoning: { enabled: false },
+      reasoning: reasoning || { enabled: false },
       usage: { include: true },
       provider: { sort: 'throughput', require_parameters: false },
     });
