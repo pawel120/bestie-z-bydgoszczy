@@ -202,7 +202,7 @@ main { flex: 1; min-height: 0; display: flex; }
 
 /* Timeline: lanes (one per idea), ruler with the moment each card came from, arrows between versions. */
 .lane {
-  position: absolute; top: 0; left: 0; height: 1140px; border-radius: 28px; pointer-events: none;
+  position: absolute; top: 0; left: 0; height: 1680px; border-radius: 28px; pointer-events: none;
   background: color-mix(in srgb, var(--surface) 55%, transparent); border: 1px solid var(--border);
 }
 .lane-title {
@@ -262,3 +262,41 @@ main { flex: 1; min-height: 0; display: flex; }
   color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); font-variant-numeric: tabular-nums;
 }
 .costs:hover { color: var(--text); }
+
+/* Explorer variants under each card. */
+.variant { position: absolute; top: 0; left: 0; width: 470px; cursor: pointer; }
+.variant-label {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 20px; font-weight: 600; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.variant-label i { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.variant-board {
+  position: relative; width: 470px; height: 293.75px; overflow: hidden; border-radius: 6px; background: #fff;
+  box-shadow: 0 0 0 calc(1px / var(--z)) rgba(0, 0, 0, .08), 0 6px 20px rgba(0, 0, 0, .12);
+}
+.variant:hover .variant-board { box-shadow: 0 0 0 calc(2px / var(--z)) #0d99ff; }
+.variant-inner { position: absolute; top: 0; left: 0; width: 960px; height: 600px; transform: scale(0.4896); transform-origin: 0 0; }
+.variant.drawing .variant-board::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(109, 74, 255, .12) 50%, transparent 70%) -100% 0 / 60% 100% no-repeat;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Multiplayer-style agent cursors (constant on-screen size). */
+.agent-cursor {
+  position: absolute; top: 0; left: 0; z-index: 50; pointer-events: none; transform-origin: 0 0;
+  transition: transform 1s cubic-bezier(.3, .7, .2, 1), opacity .4s; opacity: 0;
+}
+.agent-cursor.active { opacity: 1; }
+.agent-cursor svg { width: 22px; height: 22px; display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
+.agent-cursor svg path { fill: var(--c); stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
+.agent-cursor .tag {
+  position: absolute; left: 16px; top: 18px; padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+  font: 600 12px Inter, system-ui, sans-serif; color: #fff; background: var(--c);
+}
+.agent-cursor .bubble {
+  position: absolute; left: 16px; top: 42px; max-width: 220px; padding: 4px 9px; border-radius: 10px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; font: 500 11.5px Inter, system-ui, sans-serif; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.agent-cursor .bubble:empty { display: none; }

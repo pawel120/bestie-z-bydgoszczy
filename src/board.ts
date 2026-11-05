@@ -33,6 +33,8 @@ export interface PlanOp extends CardMeta {
   /** create: first card of a new thread · evolve: new version next to `from` · edit: small change in place. */
   op: "create" | "evolve" | "edit";
   brief: string;
+  /** Two genuinely different directions explorer agents try as variants of this card (empty for edits). */
+  explore: string[];
 }
 
 export type GateAction = "create" | "evolve" | "edit" | "ask" | "wait";
@@ -151,6 +153,10 @@ summary of what changed and why, a precise brief for the designer (what to show 
 the brief and the card), quote = the few words from the transcript that triggered it (verbatim, max 15 words) and
 at = its [mm:ss] timestamp.
 
+explore: for create / evolve ops, exactly 2 short (max 6 words), genuinely different directions that explorer agents
+should try as variants of the card (a different approach to the same goal, not a recolour — e.g. "social proof first",
+"one-click live demo"); an empty list for edits.
+
 Return an empty list when nothing should change. At most 2 ops at a time so the board grows calmly — except when
 someone explicitly asks for N proposals: then exactly N (at most 4), one thread each.
 LANGUAGE: titles, summaries and briefs in the language of the transcript (a Polish conversation → Polish).`;
@@ -220,7 +226,7 @@ const PLAN_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["op", "id", "thread", "threadTitle", "from", "kind", "title", "summary", "brief", "quote", "at"],
+        required: ["op", "id", "thread", "threadTitle", "from", "kind", "title", "summary", "brief", "quote", "at", "explore"],
         properties: {
           op: { type: "string", enum: ["create", "evolve", "edit"] },
           id: { type: "string" },
@@ -233,6 +239,7 @@ const PLAN_SCHEMA = {
           brief: { type: "string" },
           quote: { type: "string" },
           at: { type: "string" },
+          explore: { type: "array", items: { type: "string" } },
         },
       },
     },

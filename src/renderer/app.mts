@@ -287,6 +287,7 @@ boardToggle.addEventListener("change", () => {
   if (board.enabled) void board.flush();
 });
 $("board-refresh").addEventListener("click", () => void board.flush());
+$<HTMLInputElement>("board-explore").addEventListener("change", (e) => (board.explore = (e.target as HTMLInputElement).checked));
 
 const costsEl = $<HTMLButtonElement>("costs");
 const usd = (n: number) => `$${n < 1 ? n.toFixed(3) : n.toFixed(2)}`;

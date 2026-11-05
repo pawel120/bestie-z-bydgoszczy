@@ -48,7 +48,12 @@ const GATE_LINES = 10;
 const FRAME_W = 960;
 const FRAME_H = 600;
 const GAP_X = 200;
-const LANE_H = FRAME_H + 420;
+/** A lane holds the cards, their quote and caption, and the row of explorer variants under them. */
+const LANE_H = FRAME_H + 780;
+const VARIANT_W = 470;
+const VARIANT_SCALE = VARIANT_W / FRAME_W;
+const VARIANT_Y = FRAME_H + 330;
+const CURSOR_COLORS = ["#0d99ff", "#f24e1e", "#14ae5c", "#9747ff", "#ffcd29"];
 const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 2;
 
@@ -68,6 +73,62 @@ interface Card {
   createdAt: number;
   /** Drawings of this card run one after another. */
   queue: Promise<void>;
+  variants: Variant[];
+}
+
+interface Variant {
+  id: string;
+  parent: Card;
+  direction: string;
+  el: HTMLElement;
+  shadow: ShadowRoot;
+  source: string;
+  html: string;
+}
+
+/** A Figma-style multiplayer cursor for an agent, wandering over the frame it is working on. */
+class AgentCursor {
+  el: HTMLElement;
+  private bubble: HTMLElement;
+  private timer: number | undefined;
+  private rect = { x: 0, y: 0, w: 0, h: 0 };
+
+  constructor(world: HTMLElement, name: string, color: string) {
+    this.el = document.createElement("div");
+    this.el.className = "agent-cursor";
+    this.el.style.setProperty("--c", color);
+    this.el.innerHTML = `<svg viewBox="0 0 24 24"><path d="M3 2l7 19 2.6-7.4L20 11z"/></svg><span class="tag"></span><span class="bubble"></span>`;
+    this.el.querySelector(".tag")!.textContent = name;
+    this.bubble = this.el.querySelector(".bubble")!;
+    world.append(this.el);
+  }
+
+  /** Flies to a frame and keeps moving around in it, like someone working on it. */
+  work(rect: { x: number; y: number; w: number; h: number }, note: string) {
+    this.rect = rect;
+    this.bubble.textContent = note;
+    this.el.classList.add("active");
+    this.nudge();
+    window.clearInterval(this.timer);
+    this.timer = window.setInterval(() => this.nudge(), 1100 + Math.random() * 500);
+  }
+
+  nudge() {
+    const { x, y, w, h } = this.rect;
+    const px = x + w * (0.12 + Math.random() * 0.76);
+    const py = y + h * (0.12 + Math.random() * 0.76);
+    this.el.style.transform = `translate(${px}px, ${py}px) scale(calc(1 / var(--z)))`;
+  }
+
+  say(note: string) {
+    this.bubble.textContent = note;
+  }
+
+  done() {
+    window.clearInterval(this.timer);
+    this.el.classList.remove("active");
+    window.setTimeout(() => !this.el.classList.contains("active") && this.el.remove(), 900);
+  }
 }
 
 interface Lane {
@@ -133,6 +194,10 @@ export class Whiteboard {
   private zoomLabel: HTMLElement;
   private followButton: HTMLButtonElement;
   private selected: Card | null = null;
+  private variants = new Map<string, Variant>();
+  private cursorCount = 0;
+  /** Explorer agents draw variants of every new card (costs ~2 small edits per card). */
+  explore = true;
   /**
    * Base product frame, left of the timeline: the starting point every idea grows out of. Its editable replica
    * (built once by Claude) is the base for every change to the product itself.
@@ -151,6 +216,8 @@ export class Whiteboard {
     api.onBoardPartial((id, html) => {
       const card = this.cards.get(id);
       if (card?.drawing) this.setContent(card, html);
+      const variant = this.variants.get(id);
+      if (variant) this.render(variant.shadow, html);
     });
 
     viewport.classList.add("canvas");
@@ -261,6 +328,8 @@ export class Whiteboard {
 
   reset() {
     for (const card of this.cards.values()) card.el.remove();
+    for (const variant of this.variants.values()) variant.el.remove();
+    this.variants.clear();
     for (const lane of this.lanes.values()) lane.el.remove();
     this.cards.clear();
     this.lanes.clear();
@@ -356,11 +425,15 @@ export class Whiteboard {
         }
       }
       this.setStatus(`${this.lastStep ? this.lastStep + " · " : ""}planuję…`);
+      const planner = this.cursor("Planer");
+      planner.work(this.nextSlotRect(), "czyta rozmowę…");
       const started = performance.now();
       const transcript = this.marked();
       // Mark the lines as handled before drawing, even if planning fails: a failed line must not loop forever.
       this.plannedLines = upTo;
       const ops = this.guard(await this.api.planBoard(transcript, this.metas(), hint), fresh.length, ask || hint.startsWith("ask"));
+      planner.say(ops.length ? `${ops.length} × zmiana` : "nic nowego");
+      window.setTimeout(() => planner.done(), 1200);
       for (const op of ops) this.apply(op, transcript);
       this.lastStep = `${this.lastStep ? this.lastStep + " · " : ""}plan ${((performance.now() - started) / 1000).toFixed(1)} s`;
     } catch (err) {
@@ -485,6 +558,9 @@ export class Whiteboard {
   private async draw(card: Card, op: PlanOp, transcript: string) {
     if (this.cards.get(card.item.id) !== card) return; // removed meanwhile
     this.setDrawing(card, true);
+    const designer = this.cursor("Designer");
+    designer.work({ x: card.x, y: card.y, w: FRAME_W, h: FRAME_H }, card.item.source ? "edytuje kartę…" : "rysuje…");
+    let ok = false;
     try {
       const drawn = await this.api.designCard(op, card.item.source, transcript);
       if (drawn === null || this.cards.get(card.item.id) !== card) return;
@@ -492,11 +568,116 @@ export class Whiteboard {
       card.item.html = drawn.html;
       this.setContent(card, drawn.html);
       void this.api.saveBoard([...this.cards.values()].map((c) => c.item));
+      ok = true;
     } catch (err) {
       this.onError(String(err));
     } finally {
       this.setDrawing(card, false);
+      designer.done();
     }
+    if (ok && op.op !== "edit" && this.explore) void this.exploreVariants(card, op, transcript);
+  }
+
+  // MARK: - Explorer agents
+
+  /** Explorer agents each try a different direction for a fresh card, as cheap str_replace edits of it. */
+  private async exploreVariants(card: Card, op: PlanOp, transcript: string) {
+    const directions = (op.explore ?? []).filter(Boolean).slice(0, 2);
+    await Promise.all(
+      directions.map(async (direction, i) => {
+        const variant = this.createVariant(card, direction, i);
+        const agent = this.cursor(`Agent ${i + 1}`);
+        agent.work({ x: variant.parent.x + i * (VARIANT_W + 20), y: card.y + VARIANT_Y, w: VARIANT_W, h: FRAME_H * VARIANT_SCALE }, direction);
+        try {
+          const drawn = await this.api.designCard(
+            {
+              ...op,
+              id: variant.id,
+              op: "evolve",
+              title: direction,
+              brief: `Explore a VARIANT of this card in the direction "${direction}". Keep the product and its visual language, but rethink the content / structure to follow this direction boldly. Original brief: ${op.brief}`,
+              explore: [],
+            },
+            card.item.source,
+            transcript,
+          );
+          if (drawn && this.variants.get(variant.id) === variant) {
+            variant.source = drawn.source;
+            variant.html = drawn.html;
+            this.render(variant.shadow, drawn.html);
+            variant.el.classList.remove("drawing");
+          }
+        } catch (err) {
+          variant.el.classList.remove("drawing");
+          this.onError(String(err));
+        } finally {
+          agent.done();
+        }
+      }),
+    );
+  }
+
+  private createVariant(card: Card, direction: string, index: number): Variant {
+    const id = `${card.item.id}~v${card.variants.length + 1}`;
+    const el = document.createElement("section");
+    el.className = "variant drawing";
+    el.style.transform = `translate(${card.x + index * (VARIANT_W + 20)}px, ${card.y + VARIANT_Y}px)`;
+    const label = document.createElement("header");
+    label.className = "variant-label";
+    label.innerHTML = `<i></i><span></span>`;
+    (label.querySelector("i") as HTMLElement).style.background = CURSOR_COLORS[(index + 2) % CURSOR_COLORS.length];
+    label.querySelector("span")!.textContent = `Agent ${index + 1} · ${direction}`;
+    const host = document.createElement("div");
+    host.className = "variant-board";
+    const inner = document.createElement("div");
+    inner.className = "variant-inner";
+    host.append(inner);
+    const shadow = inner.attachShadow({ mode: "open" });
+    if (card.item.html) this.render(shadow, card.item.html);
+    el.append(label, host);
+    this.world.append(el);
+    const variant: Variant = { id, parent: card, direction, el, shadow, source: "", html: "" };
+    card.variants.push(variant);
+    this.variants.set(id, variant);
+    // Double-click promotes a variant to the next version of the idea on the timeline.
+    el.addEventListener("dblclick", () => this.promote(variant));
+    el.title = "Dwuklik: wybierz ten wariant jako kolejną wersję";
+    return variant;
+  }
+
+  private promote(variant: Variant) {
+    if (!variant.html) return;
+    const parent = variant.parent;
+    const lane = this.lanes.get(parent.item.thread)!;
+    const card = this.createCard(
+      {
+        ...parent.item,
+        id: this.uniqueId(`${parent.item.id}-wybor`, (id) => this.cards.has(id)),
+        title: `${parent.item.title} · ${variant.direction}`,
+        summary: `Wybrany wariant agenta: ${variant.direction}.`,
+        from: parent.item.id,
+        source: variant.source,
+        html: variant.html,
+      },
+      lane,
+    );
+    this.setContent(card, variant.html);
+    this.drawLinks();
+    this.focusOn(card);
+    void this.api.saveBoard([...this.cards.values()].map((c) => c.item));
+  }
+
+  // MARK: - Agent cursors
+
+  private cursor(name: string) {
+    const color = CURSOR_COLORS[this.cursorCount++ % CURSOR_COLORS.length];
+    return new AgentCursor(this.world, name, name.startsWith("Agent") ? CURSOR_COLORS[(Number(name.slice(-1)) + 1) % CURSOR_COLORS.length] : color);
+  }
+
+  /** Where the next new card would appear: the planner's cursor waits there. */
+  private nextSlotRect() {
+    const x = this.columns * (FRAME_W + GAP_X);
+    return { x: x - FRAME_W * 0.3, y: 0, w: FRAME_W * 0.6, h: FRAME_H * 0.6 };
   }
 
   private setDrawing(card: Card, drawing: boolean) {
@@ -546,7 +727,7 @@ export class Whiteboard {
 
     const card: Card = {
       item, col, x, y, el, label, title: label.querySelector(".title")!, host, shadow, quote, caption,
-      drawing: false, createdAt: Date.now(), queue: Promise.resolve(),
+      drawing: false, createdAt: Date.now(), queue: Promise.resolve(), variants: [],
     };
     this.cards.set(item.id, card);
     this.emptyEl.hidden = true;
@@ -717,7 +898,7 @@ export class Whiteboard {
     const x0 = Math.min(...cards.map((c) => c.x)) - 80;
     const y0 = Math.min(...cards.map((c) => c.y)) - 220;
     const x1 = Math.max(...cards.map((c) => c.x + FRAME_W)) + 80;
-    const y1 = Math.max(...cards.map((c) => c.y + FRAME_H)) + 220;
+    const y1 = Math.max(...cards.map((c) => c.y + FRAME_H)) + (this.explore ? 700 : 220);
     this.fitRect(x0, y0, x1, y1, animate);
   }
 
