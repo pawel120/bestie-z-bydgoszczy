@@ -1,7 +1,7 @@
 # Bestie · Meet (Recall.ai)
 
 The desktop Bestie app, 1:1, running **inside a Recall.ai bot** in Google Meet. The bot opens this page in its own
-browser and screen-shares it into the call, so everyone sees the live transcript and the whiteboard. The page does
+browser and screen-shares it into the call, so everyone sees the live whiteboard. The page does
 everything itself: it listens to the meeting, transcribes with ElevenLabs and draws with Jev / Groq / Claude straight
 from the browser. No server and no tunnel to the app.
 
@@ -43,6 +43,7 @@ To test in your own browser: `npm run dev` and open the address from `npm run bo
 
 ## Differences from the desktop
 
+- No transcript panel: the board takes the whole screen. The transcript is still recorded (folder button).
 - Everyone in the meeting is "Rozmówcy": the bot hears the meeting mixed together.
 - The base product (screenshot of another site) works only on the desktop.
 - The folder button downloads `transkrypcja.md` and `tablica.json`. The recording stays at Recall.

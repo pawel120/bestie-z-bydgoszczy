@@ -133,6 +133,9 @@ const api: BestieApi = {
 };
 
 window.bestie = api;
+
+// In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable).
+document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel { display: none !important; }" }));
 await import("../../src/renderer/app.mts");
 
 // The bot starts listening as soon as the page is up.
