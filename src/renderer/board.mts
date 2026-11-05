@@ -1,37 +1,52 @@
-// Live whiteboard as a Figma-like canvas: plans card changes from the running transcript (including what is being
-// said right now), places each card as a 960x600 frame on an infinite pan/zoom canvas and streams its HTML in live.
+// Live whiteboard as a timeline on a Figma-like canvas. Every idea is a thread (a lane, top to bottom in the order
+// ideas came up); every card in it is a version, and columns follow the order cards were created, so the board reads
+// left to right as the history of the conversation. Arrows show what each version grew out of, and every card
+// carries the quote it came from. Nothing ever moves on its own: cards are only added at the end or edited in place.
 
 import type { BestieApi } from "../preload.js";
 
-export interface BoardItem {
+type Kind = "mockup" | "flow" | "idea";
+
+interface BoardItem {
   id: string;
-  kind: "mockup" | "flow" | "idea";
+  thread: string;
+  threadTitle: string;
+  kind: Kind;
   title: string;
   summary: string;
+  from: string;
+  quote: string;
+  at: string;
+  source: string;
   html: string;
 }
 
-const KIND_LABEL: Record<BoardItem["kind"], string> = { mockup: "Mockup", flow: "Flow", idea: "Pomysł" };
-const KIND_ICON: Record<BoardItem["kind"], string> = {
+type PlanOp = Parameters<BestieApi["designCard"]>[0];
+
+const KIND_LABEL: Record<Kind, string> = { mockup: "Mockup", flow: "Flow", idea: "Pomysł" };
+const KIND_ICON: Record<Kind, string> = {
   mockup: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
   flow: '<rect x="2" y="9" width="6" height="6" rx="1"/><rect x="16" y="9" width="6" height="6" rx="1"/><path d="M8 12h8"/>',
   idea: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
 };
-/** Plan this long after the conversation last changed… */
+const GATE_LABEL: Record<string, string> = { create: "nowy pomysł", evolve: "nowa wersja", edit: "poprawka", wait: "czekam" };
+/** Ask the gate this long after the conversation last changed… */
 const DEBOUNCE_MS = 1_200;
 /** …but at least this often while people keep talking. */
 const MAX_WAIT_MS = 4_000;
+/** Lines of conversation the gate looks at. */
+const GATE_LINES = 10;
 
 const FRAME_W = 960;
 const FRAME_H = 600;
-const GAP_X = 160;
-const GAP_Y = 260;
-const COLUMNS = 3;
-const MIN_ZOOM = 0.08;
+const GAP_X = 200;
+const LANE_H = FRAME_H + 420;
+const MIN_ZOOM = 0.05;
 const MAX_ZOOM = 2;
 
 interface Card {
   item: BoardItem;
+  col: number;
   x: number;
   y: number;
   el: HTMLElement;
@@ -39,8 +54,15 @@ interface Card {
   title: HTMLElement;
   host: HTMLElement;
   shadow: ShadowRoot;
+  quote: HTMLElement;
   caption: HTMLElement;
   drawing: boolean;
+}
+
+interface Lane {
+  index: number;
+  el: HTMLElement;
+  title: HTMLElement;
 }
 
 const svg = (paths: string) =>
@@ -79,25 +101,31 @@ function registerProperties(css: string) {
 
 export class Whiteboard {
   private cards = new Map<string, Card>();
+  private lanes = new Map<string, Lane>();
   private lines: string[] = [];
   private partials = new Map<string, string>();
   private version = 0; // bumps on every transcript change
-  private plannedVersion = 0;
-  private planning = false;
+  private checkedVersion = 0;
+  private plannedLines = 0;
+  private busy = false;
   private debounce: number | undefined;
   private deadline: number | undefined;
-  private lastPlan = "";
-  private slots = 0;
+  private lastStep = "";
+  private columns = 0;
   enabled = true;
 
   // Canvas camera: screen = world * z + (x, y)
   private cam = { x: 40, y: 40, z: 0.4 };
   private follow = true;
   private world: HTMLElement;
+  private links: SVGSVGElement;
+  private ruler: HTMLElement;
   private emptyEl: HTMLElement;
   private zoomLabel: HTMLElement;
   private followButton: HTMLButtonElement;
   private selected: Card | null = null;
+  /** Base product frame, left of the timeline: the starting point every idea grows out of. */
+  private product: { el: HTMLElement; x: number; y: number } | null = null;
 
   constructor(
     private api: BestieApi,
@@ -113,18 +141,23 @@ export class Whiteboard {
     viewport.classList.add("canvas");
     this.world = document.createElement("div");
     this.world.className = "world";
+    this.links = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    this.links.classList.add("links");
+    this.ruler = document.createElement("div");
+    this.ruler.className = "ruler";
+    this.world.append(this.links, this.ruler);
     this.emptyEl = document.createElement("p");
     this.emptyEl.className = "empty";
-    this.emptyEl.textContent = "Tablica zapełni się mockupami i pomysłami, gdy zaczniecie rozmawiać.";
+    this.emptyEl.textContent = "Tablica zapełni się pomysłami, gdy zaczniecie rozmawiać. Każdy pomysł dostanie swój wiersz, a kolejne wersje pojawią się obok.";
     const controls = document.createElement("div");
     controls.className = "zoom-controls";
     controls.innerHTML = `
-      <button data-act="follow" title="Śledź nowe ramki">${svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>')}<span>Śledź</span></button>
+      <button data-act="follow" title="Pokazuj najnowsze karty">${svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>')}<span>Śledź</span></button>
       <span class="sep"></span>
       <button data-act="out" title="Oddal (⌘−)">${svg('<path d="M5 12h14"/>')}</button>
       <span class="zoom-value">40%</span>
       <button data-act="in" title="Przybliż (⌘+)">${svg('<path d="M12 5v14M5 12h14"/>')}</button>
-      <button data-act="fit" title="Dopasuj wszystko (⇧1)">${svg('<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>')}<span>Dopasuj</span></button>`;
+      <button data-act="fit" title="Cała oś czasu (⇧1)">${svg('<path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/>')}<span>Całość</span></button>`;
     this.zoomLabel = controls.querySelector(".zoom-value")!;
     this.followButton = controls.querySelector('[data-act="follow"]')!;
     controls.addEventListener("click", (e) => {
@@ -132,7 +165,10 @@ export class Whiteboard {
       const rect = this.viewport.getBoundingClientRect();
       if (act === "in") this.zoomAt(rect.width / 2, rect.height / 2, 1.25, true);
       if (act === "out") this.zoomAt(rect.width / 2, rect.height / 2, 0.8, true);
-      if (act === "fit") this.setFollow(true);
+      if (act === "fit") {
+        this.setFollow(false);
+        this.fitAll(true);
+      }
       if (act === "follow") this.setFollow(!this.follow);
     });
     viewport.append(this.world, this.emptyEl, controls);
@@ -140,20 +176,49 @@ export class Whiteboard {
     // Focus inside a mockup would scroll the overflow:hidden viewport and desync it from the camera.
     viewport.addEventListener("scroll", () => (viewport.scrollTop = viewport.scrollLeft = 0));
     this.bindCanvasInput();
-    new ResizeObserver(() => this.follow && this.fitAll(false)).observe(viewport);
     this.applyCamera();
     this.setFollow(true);
   }
 
+  /** Shows the base product as the starting point of the timeline (null removes it). */
+  setProduct(product: { url: string; title: string; screenshot: string } | null) {
+    this.product?.el.remove();
+    this.product = null;
+    if (product) {
+      const el = document.createElement("section");
+      el.className = "frame product";
+      const label = document.createElement("header");
+      label.className = "frame-label";
+      label.innerHTML = `<span class="kind">${svg('<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>')}Produkt bazowy</span><span class="title"></span>`;
+      label.querySelector(".title")!.textContent = `${product.title} · ${product.url.replace(/^https?:\/\//, "")}`;
+      const shot = document.createElement("img");
+      shot.className = "artboard";
+      shot.src = product.screenshot;
+      shot.alt = product.title;
+      el.append(label, shot);
+      this.world.append(el);
+      this.product = { el, x: -(FRAME_W + GAP_X + 120), y: 0 };
+      el.style.transform = `translate(${this.product.x}px, 0px)`;
+      this.emptyEl.hidden = true;
+    }
+    this.drawLinks();
+    this.fitAll(true);
+  }
+
   reset() {
     for (const card of this.cards.values()) card.el.remove();
+    for (const lane of this.lanes.values()) lane.el.remove();
     this.cards.clear();
-    this.slots = 0;
+    this.lanes.clear();
+    this.columns = 0;
     this.lines = [];
     this.partials.clear();
-    this.version = this.plannedVersion = 0;
+    this.version = this.checkedVersion = this.plannedLines = 0;
     this.clearTimers();
-    this.emptyEl.hidden = false;
+    this.ruler.replaceChildren();
+    this.links.replaceChildren();
+    this.emptyEl.hidden = !!this.product;
+    this.drawLinks();
     this.setFollow(true);
   }
 
@@ -169,20 +234,20 @@ export class Whiteboard {
     this.changed();
   }
 
-  /** Plans right now (the "refresh" button, end of a recording). */
+  /** Plans right now, skipping the gate (the "refresh" button, end of a recording). */
   async flush() {
     this.clearTimers();
-    await this.plan(true);
+    await this.step(true);
   }
 
-  // MARK: - Planning
+  // MARK: - Gate → plan → draw
 
   private changed() {
     this.version++;
     if (!this.enabled) return;
     window.clearTimeout(this.debounce);
-    this.debounce = window.setTimeout(() => void this.plan(), DEBOUNCE_MS);
-    this.deadline ??= window.setTimeout(() => void this.plan(), MAX_WAIT_MS);
+    this.debounce = window.setTimeout(() => void this.step(), DEBOUNCE_MS);
+    this.deadline ??= window.setTimeout(() => void this.step(), MAX_WAIT_MS);
   }
 
   private clearTimers() {
@@ -191,57 +256,106 @@ export class Whiteboard {
     this.debounce = this.deadline = undefined;
   }
 
-  private transcript() {
-    const live = [...this.partials].map(([speaker, text]) => `[teraz] ${speaker}: ${text}…`);
-    return [...this.lines, ...live].join("\n");
+  private live() {
+    return [...this.partials].map(([speaker, text]) => `[teraz] ${speaker}: ${text}…`);
   }
 
-  private async plan(force = false) {
-    if (this.planning || (!force && !this.enabled)) return;
+  /** The last few lines, with the ones the planner has not seen yet marked ">>". */
+  private recent() {
+    const start = Math.max(0, this.lines.length - GATE_LINES);
+    const lines = this.lines.slice(start).map((line, i) => (start + i >= this.plannedLines ? `>> ${line}` : `   ${line}`));
+    return [...lines, ...this.live().map((l) => `>> ${l}`)].join("\n");
+  }
+
+  private metas() {
+    return [...this.cards.values()].map(({ item: { source, html, ...meta } }) => meta);
+  }
+
+  private async step(force = false) {
+    if (this.busy || (!force && !this.enabled)) return;
     if (!this.lines.length && !this.partials.size) return;
-    if (!force && this.version === this.plannedVersion) return;
+    if (!force && this.version === this.checkedVersion) return;
     this.clearTimers();
-    this.planning = true;
+    this.busy = true;
     const version = this.version;
-    const transcript = this.transcript();
-    this.updateStatus();
-    const started = performance.now();
+    const linesSeen = this.lines.length;
     try {
-      const plan = await this.api.planBoard(
-        transcript,
-        [...this.cards.values()].map(({ item: { id, kind, title, summary } }) => ({ id, kind, title, summary })),
-      );
-      this.plannedVersion = version;
-      for (const id of plan.removals) this.remove(id);
-      for (const planned of plan.upserts) {
-        const { brief, ...meta } = planned;
-        void this.draw(this.upsert(meta), planned, transcript);
+      let hint = "brak klasyfikatora";
+      if (!force) {
+        this.setStatus("Słucham…");
+        const gate = await this.api.gateBoard(this.recent(), this.metas());
+        if (gate) {
+          const lane = gate.thread ? this.lanes.get(gate.thread) : null;
+          hint = `${gate.action} (pewność ${Math.round(gate.confidence * 100)}%)${gate.thread ? `, wątek ${gate.thread}` : ""}`;
+          this.lastStep = `Jev: ${GATE_LABEL[gate.action] ?? gate.action}${lane ? ` · ${lane.title.textContent}` : ""}`;
+          if (gate.action === "wait") {
+            this.checkedVersion = version;
+            return;
+          }
+        }
       }
-      if (this.follow) this.fitAll(true);
-      this.lastPlan = `Plan ${((performance.now() - started) / 1000).toFixed(1)} s`;
+      this.setStatus(`${this.lastStep ? this.lastStep + " · " : ""}planuję…`);
+      const started = performance.now();
+      const transcript = [...this.lines, ...this.live()].join("\n");
+      const ops = await this.api.planBoard(transcript, this.metas(), hint);
+      this.checkedVersion = version;
+      this.plannedLines = linesSeen;
+      for (const op of ops) this.apply(op, transcript);
+      this.lastStep = `${this.lastStep ? this.lastStep + " · " : ""}plan ${((performance.now() - started) / 1000).toFixed(1)} s`;
     } catch (err) {
       this.onError(String(err));
     } finally {
-      this.planning = false;
-      this.updateStatus();
+      this.busy = false;
+      this.setStatus();
     }
-    // The conversation moved on while we were planning.
-    if (this.version !== this.plannedVersion) this.changed();
+    // The conversation moved on in the meantime.
+    if (this.version !== this.checkedVersion) this.changed();
   }
 
-  private updateStatus() {
+  private apply(op: PlanOp, transcript: string) {
+    const existing = this.cards.get(op.id);
+    let card: Card;
+    let base = "";
+    if (existing && (op.op === "edit" || existing.item.thread === op.thread)) {
+      // Small change in place: no new frame, no camera movement.
+      card = existing;
+      base = card.item.source;
+      Object.assign(card.item, { title: op.title, summary: op.summary, kind: op.kind, quote: op.quote, at: op.at });
+      this.fillLabels(card);
+      this.flash(card, "edytowano");
+    } else {
+      const lane = this.lane(op.thread, op.threadTitle);
+      const from = this.cards.get(op.from) ?? (op.op === "evolve" ? this.latestIn(op.thread) : undefined);
+      base = op.op === "create" ? "" : from?.item.source ?? "";
+      card = this.createCard(
+        { id: op.id, thread: op.thread, threadTitle: op.threadTitle, kind: op.kind, title: op.title, summary: op.summary, from: from?.item.id ?? "", quote: op.quote, at: op.at, source: base, html: from?.item.html ?? "" },
+        lane,
+      );
+      if (from?.item.html) this.setContent(card, from.item.html); // start from the previous version, then edit
+      this.drawLinks();
+      this.focusOn(card);
+    }
+    void this.draw(card, op, base, transcript);
+  }
+
+  private latestIn(thread: string) {
+    return [...this.cards.values()].filter((c) => c.item.thread === thread).sort((a, b) => b.col - a.col)[0];
+  }
+
+  private setStatus(text?: string) {
     const drawing = [...this.cards.values()].filter((c) => c.drawing).length;
-    const parts = [this.planning ? "Planuję…" : this.lastPlan, drawing ? `rysuję ${drawing}` : ""].filter(Boolean);
+    const parts = [text ?? this.lastStep, drawing ? `rysuję ${drawing}` : ""].filter(Boolean);
     this.statusEl.textContent = parts.join(" · ");
   }
 
-  private async draw(card: Card, planned: Parameters<BestieApi["designCard"]>[0], transcript: string) {
+  private async draw(card: Card, op: PlanOp, base: string, transcript: string) {
     this.setDrawing(card, true);
     try {
-      const html = await this.api.designCard(planned, transcript);
-      if (html === null || this.cards.get(card.item.id) !== card) return; // superseded or removed
-      card.item.html = html;
-      this.setContent(card, html);
+      const drawn = await this.api.designCard(op, base, transcript);
+      if (drawn === null || this.cards.get(card.item.id) !== card) return; // superseded or removed
+      card.item.source = drawn.source;
+      card.item.html = drawn.html;
+      this.setContent(card, drawn.html);
       this.setDrawing(card, false);
       void this.api.saveBoard([...this.cards.values()].map((c) => c.item));
     } catch (err) {
@@ -253,67 +367,134 @@ export class Whiteboard {
   private setDrawing(card: Card, drawing: boolean) {
     card.drawing = drawing;
     card.el.classList.toggle("drawing", drawing);
-    this.updateStatus();
+    this.setStatus();
   }
 
-  // MARK: - Frames
+  // MARK: - Lanes, frames, links
 
-  private upsert(meta: Omit<BoardItem, "html">): Card {
-    let card = this.cards.get(meta.id);
-    if (!card) {
-      card = this.createCard({ ...meta, html: "" });
-      this.cards.set(meta.id, card);
-      this.emptyEl.hidden = true;
+  private lane(id: string, title: string): Lane {
+    let lane = this.lanes.get(id);
+    if (!lane) {
+      const el = document.createElement("div");
+      el.className = "lane";
+      const titleEl = document.createElement("h3");
+      titleEl.className = "lane-title";
+      el.append(titleEl);
+      this.world.prepend(el);
+      lane = { index: this.lanes.size, el, title: titleEl };
+      this.lanes.set(id, lane);
+      el.style.transform = `translate(-120px, ${lane.index * LANE_H - 260}px)`;
     }
-    Object.assign(card.item, meta);
-    card.el.dataset.kind = meta.kind;
-    card.title.textContent = meta.title;
-    card.caption.textContent = meta.summary;
-    card.label.querySelector(".kind")!.innerHTML = `${svg(KIND_ICON[meta.kind])}${KIND_LABEL[meta.kind]}`;
-    card.el.classList.remove("fresh");
-    void card.el.offsetWidth; // restart the highlight animation
-    card.el.classList.add("fresh");
-    return card;
+    lane.title.textContent = title;
+    return lane;
   }
 
-  private remove(id: string) {
-    const card = this.cards.get(id);
-    if (!card) return;
-    card.el.remove();
-    this.cards.delete(id);
-    if (this.selected === card) this.selected = null;
-    this.emptyEl.hidden = this.cards.size > 0;
-  }
-
-  private createCard(item: BoardItem): Card {
-    const slot = this.slots++;
-    const x = (slot % COLUMNS) * (FRAME_W + GAP_X);
-    const y = Math.floor(slot / COLUMNS) * (FRAME_H + GAP_Y);
+  private createCard(item: BoardItem, lane: Lane): Card {
+    const col = this.columns++;
+    const x = col * (FRAME_W + GAP_X);
+    const y = lane.index * LANE_H;
 
     const el = document.createElement("section");
     el.className = "frame";
     const label = document.createElement("header");
     label.className = "frame-label";
-    label.innerHTML = `<span class="kind"></span><span class="title"></span><span class="live">rysuję</span>`;
+    label.innerHTML = `<span class="kind"></span><span class="title"></span><span class="note"></span><span class="live">rysuję</span>`;
     const host = document.createElement("div");
     host.className = "artboard";
     const shadow = host.attachShadow({ mode: "open" });
+    const quote = document.createElement("blockquote");
+    quote.className = "frame-quote";
     const caption = document.createElement("p");
     caption.className = "frame-caption";
-    el.append(label, host, caption);
+    el.append(label, host, quote, caption);
     this.world.append(el);
 
-    const card: Card = { item, x, y, el, label, title: label.querySelector(".title")!, host, shadow, caption, drawing: false };
+    const card: Card = { item, col, x, y, el, label, title: label.querySelector(".title")!, host, shadow, quote, caption, drawing: false };
+    this.cards.set(item.id, card);
+    this.emptyEl.hidden = true;
+    this.fillLabels(card);
     this.position(card);
     this.bindFrameInput(card);
+    this.flash(card, item.from ? "nowa wersja" : "nowy pomysł");
+
+    // Timeline ruler: one tick per column with the moment the card came from.
+    const tick = document.createElement("span");
+    tick.className = "tick";
+    tick.style.transform = `translateX(${x}px)`;
+    tick.textContent = item.at || "";
+    this.ruler.append(tick);
+    this.layoutLanes();
     return card;
+  }
+
+  private fillLabels(card: Card) {
+    const { item } = card;
+    card.el.dataset.kind = item.kind;
+    card.title.textContent = item.title;
+    card.label.querySelector(".kind")!.innerHTML = `${svg(KIND_ICON[item.kind])}${KIND_LABEL[item.kind]}`;
+    card.quote.replaceChildren();
+    if (item.quote) {
+      const text = document.createElement("span");
+      text.textContent = `„${item.quote.replace(/^["„”]+|["„”]+$/g, "")}”`;
+      const at = document.createElement("time");
+      at.textContent = item.at;
+      card.quote.append(text, at);
+    }
+    card.caption.textContent = item.summary;
+  }
+
+  private flash(card: Card, note: string) {
+    const el = card.label.querySelector(".note") as HTMLElement;
+    el.textContent = note;
+    card.el.classList.remove("fresh");
+    void card.el.offsetWidth; // restart the highlight animation
+    card.el.classList.add("fresh");
+  }
+
+  /** Lane backgrounds span the whole timeline width. */
+  private layoutLanes() {
+    const width = Math.max(1, this.columns) * (FRAME_W + GAP_X) - GAP_X + 240;
+    for (const lane of this.lanes.values()) lane.el.style.width = `${width}px`;
+    this.ruler.style.width = `${width}px`;
+  }
+
+  /** Arrows from each version to the one it grew out of. */
+  private drawLinks() {
+    const paths: string[] = [];
+    for (const card of this.cards.values()) {
+      const from = this.cards.get(card.item.from);
+      if (!from) continue;
+      const x0 = from.x + FRAME_W;
+      const y0 = from.y + FRAME_H / 2;
+      const x1 = card.x - 14;
+      const y1 = card.y + FRAME_H / 2;
+      const dx = Math.max(80, (x1 - x0) / 2);
+      paths.push(`<path d="M${x0} ${y0} C${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}" marker-end="url(#arrow)"/>`);
+    }
+    // Every thread starts from the base product.
+    if (this.product) {
+      const firsts = new Map<string, Card>();
+      for (const card of this.cards.values()) {
+        const first = firsts.get(card.item.thread);
+        if (!first || card.col < first.col) firsts.set(card.item.thread, card);
+      }
+      for (const card of firsts.values()) {
+        const x0 = this.product.x + FRAME_W;
+        const y0 = this.product.y + FRAME_H / 2;
+        const x1 = card.x - 14;
+        const y1 = card.y + FRAME_H / 2;
+        const dx = Math.max(80, (x1 - x0) / 2);
+        paths.push(`<path class="from-product" d="M${x0} ${y0} C${x0 + dx} ${y0}, ${x1 - dx} ${y1}, ${x1} ${y1}" marker-end="url(#arrow)"/>`);
+      }
+    }
+    this.links.innerHTML = `<defs><marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>${paths.join("")}`;
   }
 
   private position(card: Card) {
     card.el.style.transform = `translate(${card.x}px, ${card.y}px)`;
   }
 
-  /** Renders model HTML into the frame's shadow root: styles stay scoped and no iframe has to reload. */
+  /** Renders model HTML into the frame's shadow root: styles stay scoped and nothing has to reload. */
   private setContent(card: Card, html: string) {
     const doc = new DOMParser().parseFromString(html, "text/html");
     sanitize(doc);
@@ -379,20 +560,35 @@ export class Whiteboard {
     }
   }
 
-  private fitAll(animate: boolean) {
-    if (!this.cards.size) return;
-    const cards = [...this.cards.values()];
-    const x0 = Math.min(...cards.map((c) => c.x));
-    const y0 = Math.min(...cards.map((c) => c.y)) - 60;
-    const x1 = Math.max(...cards.map((c) => c.x + FRAME_W));
-    const y1 = Math.max(...cards.map((c) => c.y + FRAME_H)) + 120;
+  private fitCards(cards: Card[], animate: boolean) {
+    if (!cards.length) return;
+    const x0 = Math.min(...cards.map((c) => c.x)) - 80;
+    const y0 = Math.min(...cards.map((c) => c.y)) - 220;
+    const x1 = Math.max(...cards.map((c) => c.x + FRAME_W)) + 80;
+    const y1 = Math.max(...cards.map((c) => c.y + FRAME_H)) + 220;
     this.fitRect(x0, y0, x1, y1, animate);
+  }
+
+  private fitAll(animate: boolean) {
+    const cards = [...this.cards.values()];
+    if (this.product) cards.push({ x: this.product.x, y: this.product.y } as Card);
+    this.fitCards(cards, animate);
+  }
+
+  /** Follow mode: show the newest card next to the one it came from, not the whole (growing) board. */
+  private focusOn(card: Card) {
+    if (!this.follow) return;
+    const from = this.cards.get(card.item.from);
+    const recent = [...this.cards.values()].sort((a, b) => b.col - a.col).slice(0, 3);
+    this.fitCards([...new Set([card, ...(from ? [from] : []), ...recent])], true);
+    this.follow = true;
   }
 
   private setFollow(follow: boolean) {
     this.follow = follow;
     this.followButton.classList.toggle("active", follow);
-    if (follow) this.fitAll(true);
+    const newest = [...this.cards.values()].sort((a, b) => b.col - a.col)[0];
+    if (follow && newest) this.focusOn(newest);
   }
 
   // MARK: - Input
@@ -443,7 +639,10 @@ export class Whiteboard {
     window.addEventListener("keydown", (e) => {
       if ((e.target as HTMLElement).closest("input, select, textarea")) return;
       const rect = vp.getBoundingClientRect();
-      if (e.shiftKey && e.code === "Digit1") this.setFollow(true);
+      if (e.shiftKey && e.code === "Digit1") {
+        this.setFollow(false);
+        this.fitAll(true);
+      }
       else if ((e.metaKey || e.ctrlKey) && (e.key === "=" || e.key === "+")) this.zoomAt(rect.width / 2, rect.height / 2, 1.25, true);
       else if ((e.metaKey || e.ctrlKey) && e.key === "-") this.zoomAt(rect.width / 2, rect.height / 2, 0.8, true);
       else if (e.key === "Escape") this.select(null);
@@ -468,6 +667,7 @@ export class Whiteboard {
       card.y += (e.clientY - drag.y) / this.cam.z;
       drag = { x: e.clientX, y: e.clientY };
       this.position(card);
+      this.drawLinks();
     });
     const end = () => {
       drag = null;
@@ -479,7 +679,7 @@ export class Whiteboard {
     card.host.addEventListener("pointerdown", () => this.select(card));
     card.host.addEventListener("dblclick", () => {
       this.setFollow(false);
-      this.fitRect(card.x, card.y - 40, card.x + FRAME_W, card.y + FRAME_H + 40, true);
+      this.fitRect(card.x - 40, card.y - 80, card.x + FRAME_W + 40, card.y + FRAME_H + 200, true);
     });
   }
 }

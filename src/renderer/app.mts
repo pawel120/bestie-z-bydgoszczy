@@ -261,7 +261,7 @@ window.addEventListener("keydown", (e) => {
 $("reveal").addEventListener("click", () => api.revealRecordings());
 languageSelect.addEventListener("change", () => api.setLanguage(languageSelect.value));
 $("save-keys").addEventListener("click", async () => {
-  for (const name of ["elevenlabs", "groq", "anthropic"] as const) {
+  for (const name of ["elevenlabs", "groq", "anthropic", "openrouter"] as const) {
     const input = $<HTMLInputElement>(`key-${name}`);
     if (input.value.trim()) await api.setApiKey(name, input.value.trim());
     input.value = "";
@@ -278,6 +278,7 @@ async function showKeyState() {
   if (settings.hasElevenLabsKey) $<HTMLInputElement>("key-elevenlabs").placeholder = saved;
   if (settings.hasGroqKey) $<HTMLInputElement>("key-groq").placeholder = saved;
   if (settings.hasAnthropicKey) $<HTMLInputElement>("key-anthropic").placeholder = saved;
+  if (settings.hasOpenRouterKey) $<HTMLInputElement>("key-openrouter").placeholder = saved;
   boardToggle.checked = board.enabled = settings.hasGroqKey;
 }
 
@@ -286,6 +287,23 @@ boardToggle.addEventListener("change", () => {
   if (board.enabled) void board.flush();
 });
 $("board-refresh").addEventListener("click", () => void board.flush());
+$("product-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const input = $<HTMLInputElement>("product-url");
+  const url = input.value.trim();
+  if (!url) {
+    await api.clearProduct();
+    board.setProduct(null);
+    return;
+  }
+  setStatus(`Wczytuję ${url}…`);
+  try {
+    board.setProduct(await api.loadProduct(url));
+    setStatus(null);
+  } catch (err) {
+    setStatus(`Nie udało się wczytać produktu: ${err}`);
+  }
+});
 
 // MARK: - Replay a saved transcript (demo / backtesting without recording)
 

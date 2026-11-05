@@ -2,7 +2,8 @@ import { app, BrowserWindow, desktopCapturer, ipcMain, safeStorage, session, she
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { boardToHtml, designCard, planBoard, type BoardItem, type PlannedItem } from "./board";
+import { boardToHtml, designCard, gateBoard, planBoard, setProduct, type BoardItem, type CardMeta, type PlanOp } from "./board";
+import { loadProduct } from "./product";
 
 // Dev convenience: load API keys from a gitignored .env next to package.json (packaged builds use Settings).
 if (!app.isPackaged) {
@@ -17,11 +18,12 @@ if (!app.isPackaged) {
 const recordingsRoot = () => path.join(app.getPath("documents"), "Bestie");
 const configPath = () => path.join(app.getPath("userData"), "config.json");
 
-type KeyName = "elevenlabs" | "groq" | "anthropic";
+type KeyName = "elevenlabs" | "groq" | "anthropic" | "openrouter";
 const ENV_KEYS: Record<KeyName, string> = {
   elevenlabs: "ELEVENLABS_API_KEY",
   groq: "GROQ_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 };
 
 interface Config {
@@ -71,6 +73,7 @@ function registerIpc() {
       hasElevenLabsKey: (await getApiKey("elevenlabs")) !== "",
       hasGroqKey: (await getApiKey("groq")) !== "",
       hasAnthropicKey: (await getApiKey("anthropic")) !== "",
+      hasOpenRouterKey: (await getApiKey("openrouter")) !== "",
       language: config.language ?? "auto",
     };
   });
@@ -115,34 +118,48 @@ function registerIpc() {
     if (currentFolder) await appendFile(path.join(currentFolder, "spotkanie.webm"), Buffer.from(chunk));
   });
 
-  ipcMain.handle("board:plan", async (_e, transcript: string, board: BoardItem[]) => {
+  // Without an OpenRouter key there is no gate: every change goes straight to the planner.
+  ipcMain.handle("board:gate", async (_e, recent: string, board: CardMeta[]) => {
+    const apiKey = await getApiKey("openrouter");
+    return apiKey ? gateBoard(apiKey, recent, board) : null;
+  });
+
+  ipcMain.handle("board:plan", async (_e, transcript: string, board: CardMeta[], hint: string) => {
     const apiKey = await getApiKey("groq");
     if (!apiKey) throw new Error("Brak klucza API Groq — tablica wyłączona.");
-    return planBoard(apiKey, transcript, board);
+    return planBoard(apiKey, transcript, board, hint);
   });
 
   // One in-flight drawing per card; a newer version of the same card cancels the old one.
   const drawing = new Map<string, AbortController>();
-  ipcMain.handle("board:design", async (e, item: PlannedItem, transcript: string) => {
+  ipcMain.handle("board:design", async (e, op: PlanOp, base: string, transcript: string) => {
     const keys = { groq: await getApiKey("groq"), anthropic: await getApiKey("anthropic") };
-    drawing.get(item.id)?.abort();
+    drawing.get(op.id)?.abort();
     const controller = new AbortController();
-    drawing.set(item.id, controller);
+    drawing.set(op.id, controller);
     try {
       return await designCard(
         keys,
-        item,
+        op,
+        base,
         transcript,
-        (html) => !controller.signal.aborted && e.sender.send("board:partial", item.id, html),
+        (html) => !controller.signal.aborted && e.sender.send("board:partial", op.id, html),
         controller.signal,
       );
     } catch (err) {
       if (controller.signal.aborted) return null; // superseded
       throw err;
     } finally {
-      if (drawing.get(item.id) === controller) drawing.delete(item.id);
+      if (drawing.get(op.id) === controller) drawing.delete(op.id);
     }
   });
+
+  ipcMain.handle("product:load", async (_e, url: string) => {
+    const product = await loadProduct(/^https?:\/\//.test(url) ? url : `https://${url}`);
+    setProduct(product);
+    return product;
+  });
+  ipcMain.handle("product:clear", () => setProduct(null));
 
   ipcMain.handle("board:save", async (_e, board: BoardItem[]) => {
     if (!currentFolder) return;

@@ -44,6 +44,9 @@
         <label>Claude <small>rysowanie kart (opcjonalnie)</small>
           <input id="key-anthropic" type="password" autocomplete="off" placeholder="sk-ant-…">
         </label>
+        <label>OpenRouter <small>Jev: czy jest co rysować (opcjonalnie)</small>
+          <input id="key-openrouter" type="password" autocomplete="off" placeholder="sk-or-…">
+        </label>
         <button id="save-keys" class="primary">Zapisz</button>
         <p class="hint">Szyfrowane systemowo (Keychain / libsecret). Zmienne <code>ELEVENLABS_API_KEY</code>, <code>GROQ_API_KEY</code> i <code>ANTHROPIC_API_KEY</code> mają pierwszeństwo.</p>
       </div>
@@ -63,6 +66,10 @@
       <header class="panel-header">
         <h2>Tablica</h2>
         <label class="switch"><input id="board-enabled" type="checkbox"><span></span>AI na żywo</label>
+        <form id="product-form" class="product-form" title="Produkt, o którego funkcjach rozmawiacie — karty będą w jego stylu">
+          <input id="product-url" type="text" placeholder="Produkt bazowy, np. x.ai/bot" autocomplete="off">
+          <button class="ghost" type="submit">Wczytaj</button>
+        </form>
         <span id="board-status" class="board-status"></span>
         <span class="spacer"></span>
         <button id="board-refresh" class="ghost" title="Przerysuj tablicę teraz">

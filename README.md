@@ -33,15 +33,19 @@ If system audio is unavailable, the app records the microphone only.
 ## How it works
 
 - Mic and system audio each get their own Scribe session, so the transcript labels speakers as **"Ja"** (you) and **"Rozmówcy"** (everyone else).
-- Whiteboard (`src/board.ts`):
-  - It also sees what is being said right now (partials). A plan runs ~1.2 s after the last change in the conversation, and at least every 4 s while people keep talking.
-  - The planner (Groq `gpt-oss-120b`, ~2 s) decides which cards to add, change or remove. A card shows up immediately as a frame with its title.
-  - Each card's HTML streams into its frame. With `ANTHROPIC_API_KEY` set, Claude Opus 5.5 draws it in fast mode (~0.7 s to the first token, ~390 tok/s, much better design; roughly $0.15 per card). Without the key, the Groq model draws it (faster, weaker).
-  - Cards are written in Tailwind (compiled in the main process) and rendered in Shadow DOM after removing scripts and `on*` handlers.
-- The canvas works like Figma:
+- Whiteboard (`src/board.ts`), with three steps on every change in the conversation:
+  1. **Gate: Jev** (`typesafe/jev-1.14` via OpenRouter decisions, ~0.4 s, ~$0.00002). Classifies the new lines as a new idea, a new version, a small tweak or "wait". On "wait" nothing else runs.
+  2. **Plan: Groq** `gpt-oss-120b` (~2 s). Turns that into `create` / `evolve` / `edit` operations on threads, with the quote and the moment it came from.
+  3. **Draw: Claude Opus 5.5 in fast mode.** It writes a new card from scratch (the first version is very visual, minimal text). It edits existing ones with `str_replace`, like a coding agent, without rewriting them. Without `ANTHROPIC_API_KEY`, Groq does the drawing.
+- The board is a **timeline** on a Figma-like canvas:
+  - one lane per idea; versions run left to right and are joined by arrows;
+  - above them is a time axis, and under each card the quote it came from;
+  - nothing moves on its own: cards are only added at the end or edited in place.
+- Canvas controls:
   - pan by scrolling or dragging the background, zoom with a pinch or ⌘+scroll;
-  - move a frame by dragging its label, double-click to zoom into a frame;
-  - ⇧1 or "Dopasuj" fits everything, and "Śledź" follows new frames.
+  - move a frame by dragging its label, double-click to zoom in;
+  - ⇧1 or "Całość" shows everything, and "Śledź" follows new cards.
+- **Base product** (field next to "Tablica", e.g. `x.ai/bot`): the app loads the page in a hidden window, takes a screenshot and extracts its design system. The screenshot is the starting point of the timeline, and the cards are drawn in that product's style. Claude gets a small screenshot (~700 tokens) plus a short description, cached.
 - **"Wczytaj transkrypt"** replays a `[mm:ss] Speaker: text` file at ~20× speed. Use it to demo or backtest the whiteboard without recording.
 
 Each meeting is saved in `~/Documents/Bestie/<date time>/`:
