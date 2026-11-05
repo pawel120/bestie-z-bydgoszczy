@@ -125,9 +125,9 @@ function registerIpc() {
   });
 
   ipcMain.handle("board:plan", async (_e, transcript: string, board: CardMeta[], hint: string) => {
-    const apiKey = await getApiKey("groq");
-    if (!apiKey) throw new Error("Brak klucza API Groq — tablica wyłączona.");
-    return planBoard(apiKey, transcript, board, hint);
+    const keys = { groq: await getApiKey("groq"), anthropic: await getApiKey("anthropic") };
+    if (!keys.groq && !keys.anthropic) throw new Error("Brak klucza Claude ani Groq — tablica wyłączona.");
+    return planBoard(keys, transcript, board, hint);
   });
 
   // One in-flight drawing per card; a newer version of the same card cancels the old one.

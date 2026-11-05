@@ -96,7 +96,8 @@ summary of what changed and why, a precise brief for the designer (what to show 
 the brief and the card), quote = the few words from the transcript that triggered it (verbatim, max 15 words) and
 at = its [mm:ss] timestamp.
 
-Return an empty list when nothing should change. At most 2 ops at a time; the board should grow calmly.
+Return an empty list when nothing should change. At most 2 ops at a time so the board grows calmly — except when
+someone explicitly asks for N proposals: then exactly N (at most 4), one thread each.
 LANGUAGE: titles, summaries and briefs in the language of the transcript (a Polish conversation → Polish).`;
 
 export const DESIGNER_PROMPT = `You are a world-class product designer (Linear / Vercel / Stripe level) drawing one card of a
@@ -246,18 +247,34 @@ export async function gateBoard(apiKey: string, recent: string, board: CardMeta[
   };
 }
 
-/** Step 2 (~2 s): decide the concrete operations on threads and cards. */
-export async function planBoard(apiKey: string, transcript: string, board: CardMeta[], hint: string): Promise<PlanOp[]> {
+const claudeDefaults = {
+  model: CLAUDE_DESIGNER_MODEL,
+  speed: "fast" as const,
+  betas: ["fast-mode-2026-02-01", "server-side-fallback-2026-07-01"],
+  fallbacks: "default" as const,
+  output_config: { effort: "low" as const },
+};
+
+/**
+ * Step 2: decide the concrete operations on threads and cards. With a Claude key the plan (and, on requests, the
+ * ideas themselves) comes from Opus in fast mode (~2 s); Groq is the fallback.
+ */
+export async function planBoard(
+  keys: DesignKeys,
+  transcript: string,
+  board: CardMeta[],
+  hint: string,
+): Promise<PlanOp[]> {
+  const content = `${productText() ? productText() + "\n\n" : ""}Board:\n${describeBoard(board)}\n\nClassifier hint: ${hint}\n\nTranscript:\n${recentPart(transcript)}`;
+  if (keys.anthropic) return planWithClaude(keys.anthropic, content, hint.startsWith("ask"));
+
   const res = await request(
-    apiKey,
+    keys.groq,
     {
       max_completion_tokens: 6_000,
       messages: [
         { role: "system", content: PLANNER_PROMPT },
-        {
-          role: "user",
-          content: `${productText() ? productText() + "\n\n" : ""}Board:\n${describeBoard(board)}\n\nClassifier hint: ${hint}\n\nTranscript:\n${recentPart(transcript)}`,
-        },
+        { role: "user", content },
       ],
       response_format: { type: "json_schema", json_schema: { name: "board_plan", strict: true, schema: PLAN_SCHEMA } },
     },
@@ -266,6 +283,21 @@ export async function planBoard(apiKey: string, transcript: string, board: CardM
   if (!res.ok) throw await failure(res);
   const data = (await res.json()) as { choices: { message: { content: string } }[] };
   return (JSON.parse(data.choices[0].message.content) as { ops: PlanOp[] }).ops;
+}
+
+async function planWithClaude(apiKey: string, content: string, ideating: boolean): Promise<PlanOp[]> {
+  const client = new Anthropic({ apiKey });
+  const message = await client.beta.messages.create({
+    ...claudeDefaults,
+    max_tokens: 8_000,
+    // Low effort keeps plans at ~2–4 s; BESTIE_PLAN_EFFORT=medium gives requests for ideas more thought.
+    output_config: { effort: process.env.BESTIE_PLAN_EFFORT === "medium" && ideating ? "medium" : "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
+    system: [{ type: "text", text: PLANNER_PROMPT, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content }],
+  });
+  if (message.stop_reason === "refusal") throw new Error("Claude odmówił zaplanowania tablicy.");
+  const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
+  return (JSON.parse(text) as { ops: PlanOp[] }).ops;
 }
 
 const stripFences = (html: string) => html.replace(/^\s*```(?:html)?\s*/i, "").replace(/```\s*$/, "");
@@ -319,13 +351,7 @@ export async function designCard(
   return { source, html: await inlineTailwind(source) };
 }
 
-const claudeDefaults = {
-  model: CLAUDE_DESIGNER_MODEL,
-  speed: "fast" as const,
-  betas: ["fast-mode-2026-02-01", "server-side-fallback-2026-07-01"],
-  fallbacks: "default" as const,
-  output_config: { effort: "low" as const },
-};
+
 
 async function drawWithClaude(
   apiKey: string,
