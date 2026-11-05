@@ -1,0 +1,22 @@
+{
+  "name": "bestie-meet",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Bestie inside a Recall.ai bot: the bot opens this page, listens to the Google Meet and screen-shares the live AI whiteboard",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "bot": "node bot.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.5.0",
+    "tailwindcss": "^4.3.4",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

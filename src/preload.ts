@@ -35,6 +35,14 @@ const api = {
     ipcRenderer.on("costs", (_e, costs: Costs) => listener(costs));
   },
   resetCosts: (): Promise<void> => ipcRenderer.invoke("costs:reset"),
+  /** Starts Horda if needed; resolves with the URL of its live panel. */
+  prepareHorda: (): Promise<string> => ipcRenderer.invoke("horda:prepare"),
+  runHorda: (
+    a: { id: string; html: string },
+    b: { id: string; html: string },
+    agents: number,
+  ): Promise<{ conv: { A: string; B: string }; headline: string; pValue: number | null; cost: number }> =>
+    ipcRenderer.invoke("horda:run", a, b, agents),
   saveBoard: (board: BoardItem[]): Promise<void> => ipcRenderer.invoke("board:save", board),
 };
 

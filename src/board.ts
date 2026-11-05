@@ -83,6 +83,10 @@ export function resetCosts() {
   Object.assign(costs, { total: 0, jev: 0, groq: 0, claude: 0, calls: 0 });
   onCosts({ ...costs });
 }
+/** Horda runs (Jev personas) are billed through OpenRouter like the gate. */
+export function addHordaCost(usd: number) {
+  addCost("jev", usd);
+}
 function addCost(provider: "jev" | "groq" | "claude", usd: number) {
   costs[provider] += usd;
   costs.total += usd;
@@ -114,6 +118,7 @@ let product: Product | null = null;
 export function setProduct(next: Product | null) {
   product = next;
 }
+export const currentProduct = () => product;
 
 const productText = () =>
   product
