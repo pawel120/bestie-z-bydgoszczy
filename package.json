@@ -1,0 +1,46 @@
+{
+  "name": "bestie",
+  "productName": "Bestie",
+  "version": "0.1.0",
+  "description": "Local meeting recorder with live ElevenLabs Scribe v2 Realtime transcription",
+  "main": "dist/main.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc && cp src/renderer/index.html src/renderer/styles.css dist/renderer/",
+    "start": "npm run build && electron .",
+    "dev:mac": "npm run build && ./scripts/mac-dev.sh",
+    "dist:mac": "npm run build && electron-builder --mac --dir",
+    "dist:linux": "npm run build && electron-builder --linux AppImage"
+  },
+  "build": {
+    "appId": "dev.bestie.recorder",
+    "productName": "Bestie",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Bestie nagrywa Twój głos podczas spotkania i transkrybuje go na żywo.",
+        "NSAudioCaptureUsageDescription": "Bestie nagrywa dźwięk systemu (rozmówców) podczas spotkania."
+      }
+    },
+    "linux": {
+      "category": "AudioVideo"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.5.0",
+    "tailwindcss": "^4.3.4"
+  }
+}

@@ -1,0 +1,25 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fakturix – załóż konto</title><link rel="stylesheet" href="../style.css"></head><body>
+<nav><b>Fakturix</b><div><a href="index.html">Produkt</a><a href="cennik.html">Cennik</a><a href="#">Kontakt</a></div></nav>
+<div class="wrap" style="max-width:560px"><h1>Utwórz konto firmowe</h1><p class="muted">Krok 1 z 3. Wszystkie pola są wymagane.</p>
+<form id="f" novalidate>
+<label for="a1">Imię</label><input id="a1" required>
+<label for="a2">Nazwisko</label><input id="a2" required>
+<label for="a3">E-mail służbowy</label><input id="a3" type="email" required>
+<label for="a4">Telefon</label><input id="a4" type="tel" required>
+<label for="a5">NIP</label><input id="a5" required>
+<label for="a6">Nazwa firmy</label><input id="a6" required>
+<label for="a7">Wielkość firmy</label><select id="a7" required><option value="">-- wybierz --</option><option>1 osoba</option><option>2-10</option><option>11-50</option><option>51+</option></select>
+<label for="a8">Hasło (min. 12 znaków, wielka litera, cyfra i znak specjalny)</label><input id="a8" type="password" required>
+<label for="a9">Powtórz hasło</label><input id="a9" type="password" required>
+<p class="chk"><input type="checkbox" id="a10" required><label for="a10" style="margin:0">Wyrażam zgodę na otrzymywanie informacji handlowych drogą elektroniczną od Fakturix i partnerów (wymagane)</label></p>
+<div class="err" id="err"></div>
+<button class="btn" type="submit">Dalej</button></form></div>
+<script>
+document.getElementById('f').onsubmit=e=>{e.preventDefault();const v=id=>document.getElementById(id).value.trim();const err=document.getElementById('err');
+for(const id of ['a1','a2','a3','a4','a5','a6','a7','a8','a9']) if(!v(id)){err.textContent='Uzupełnij wszystkie wymagane pola.';return}
+if(!/^\d{10}$/.test(v('a5').replace(/[- ]/g,''))){err.textContent='Nieprawidłowy NIP (10 cyfr).';return}
+const p=v('a8');if(p.length<12||!/[A-Z]/.test(p)||!/\d/.test(p)||!/[^A-Za-z0-9]/.test(p)){err.textContent='Hasło nie spełnia wymagań bezpieczeństwa.';return}
+if(p!==v('a9')){err.textContent='Hasła nie są identyczne.';return}
+if(!document.getElementById('a10').checked){err.textContent='Zgoda jest wymagana.';return}
+location.href='platnosc.html'};
+</script></body></html>

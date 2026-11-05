@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Horda – test konwersji w minutę</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐝</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0d12;--panel:#12151d;--panel2:#181c26;--line:#262b38;--fg:#e8ebf2;--mut:#8a91a3;--a:#ff9f43;--b:#4dabf7;--ok:#2fd27a;--bad:#ff4d6d;--think:#7c8cff;--act:#ffd43b}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,sans-serif}
+header{display:flex;align-items:center;gap:16px;padding:14px 22px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#0b0d12ee;backdrop-filter:blur(8px);z-index:10;flex-wrap:wrap}
+.logo{font-weight:800;letter-spacing:.08em;font-size:20px}.logo span{color:var(--bad)}
+.tag{color:var(--mut);font-size:14px;flex:1;min-width:200px}
+.pill{font-family:"JetBrains Mono",monospace;font-size:12px;background:var(--panel2);border:1px solid var(--line);padding:6px 10px;border-radius:999px;color:var(--mut);white-space:nowrap}
+.pill b{color:var(--fg)}
+main{padding:18px 22px;max-width:1700px;margin:0 auto}
+.cfg{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;grid-template-columns:2fr 2fr 1fr 1fr;gap:12px;align-items:end}
+.cfg label{font-size:12px;color:var(--mut);display:block;margin-bottom:4px}
+.cfg input,.cfg textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:9px 10px;font:inherit;font-size:14px}
+.cfg .wide{grid-column:1/4}
+button.go{background:linear-gradient(135deg,#ff4d6d,#ff9f43);color:#111;border:0;border-radius:10px;padding:12px 18px;font-weight:800;font-size:15px;cursor:pointer;width:100%}
+button.go:disabled{opacity:.5;cursor:default}
+.phase{color:var(--mut);font-size:13px;margin:10px 2px;min-height:18px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:8px}
+.col{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+.colh{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.vb{font-weight:800;font-size:13px;padding:3px 9px;border-radius:6px;color:#111}
+.vA{background:var(--a)}.vB{background:var(--b)}
+.url{color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.big{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:var(--panel2);border-radius:4px;overflow:hidden;margin-bottom:12px}.bar i{display:block;height:100%;background:var(--ok);transition:width .4s}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{background:var(--panel2);border:2px solid var(--line);border-radius:10px;overflow:hidden;position:relative;transition:border-color .2s}
+.tile.thinking{border-color:var(--think)}.tile.acting{border-color:var(--act)}.tile.converted{border-color:var(--ok)}.tile.left{border-color:var(--bad);opacity:.8}
+.shot{aspect-ratio:16/11;background:#000 center/contain no-repeat;position:relative}
+.st{position:absolute;top:6px;right:6px;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;background:#000a}
+.tile.converted .st{background:var(--ok);color:#111}.tile.left .st{background:var(--bad);color:#fff}
+.dev{position:absolute;top:6px;left:6px;font-size:11px;background:#000a;border-radius:5px;padding:1px 5px}
+.who{padding:7px 8px 0;font-size:12px;font-weight:600}.who span{color:var(--mut);font-weight:400}
+.think{padding:3px 8px 8px;font-size:11.5px;color:#c6cbe0;min-height:44px;line-height:1.35}
+.path{padding:0 8px 8px;font-size:10px;color:var(--mut);font-family:"JetBrains Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+section.res{margin-top:18px;display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card h3{margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+.verdict{font-size:22px;font-weight:800;line-height:1.25}
+.vs{display:flex;gap:16px;margin:12px 0}.vs div{flex:1;background:var(--panel2);border-radius:10px;padding:10px}
+.vs .big{font-size:34px}.ci{font-size:11px;color:var(--mut)}
+.fstep{margin:8px 0}.fstep .lbl{font-size:12px;color:var(--mut);margin-bottom:3px;font-family:"JetBrains Mono",monospace}
+.fb{display:flex;align-items:center;gap:6px;margin:2px 0}.fb i{height:14px;border-radius:3px;display:block;transition:width .4s}.fb span{font-size:11px;color:var(--mut);font-variant-numeric:tabular-nums}
+.reason{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line)}
+.quotes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:18px}
+.q{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--bad);border-radius:10px;padding:10px 12px;font-size:13px}
+.q.ok{border-left-color:var(--ok)}.q small{display:block;color:var(--mut);margin-top:6px;font-size:11px}
+.insight{margin-top:18px;background:linear-gradient(135deg,#1a1430,#12151d);border:1px solid #3b2f6b}
+.insight ul{margin:6px 0 0;padding-left:18px}.insight li{margin:5px 0;font-size:14px}
+.hidden{display:none}
+.single .cols{grid-template-columns:1fr}
+@media (max-width:1000px){.cfg{grid-template-columns:1fr 1fr}.cfg .wide{grid-column:1/3}.cols,section.res{grid-template-columns:1fr}}
+@media (max-width:560px){main{padding:12px}.cfg{grid-template-columns:1fr}.cfg .wide{grid-column:1}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">HOR<span>DA</span></div>
+  <div class="tag">Wypuść hordę person na swoją stronę. Zobacz, gdzie i dlaczego odpadają, w minutę zamiast w dwa tygodnie.</div>
+  <div class="pill">⏱ <b id="t">0:00</b></div>
+  <div class="pill">💸 <b id="cost">$0.0000</b> · <span id="calls">0</span> wywołań</div>
+  <div class="pill" id="model">model: –</div>
+</header>
+<main id="main">
+  <form class="cfg" id="cfg">
+    <div><label>Wariant A (URL)</label><input id="urlA" required></div>
+    <div><label>Wariant B (URL, opcjonalnie)</label><input id="urlB"></div>
+    <div><label>Persony na wariant</label><input id="agents" type="number" min="1" max="30" value="10"></div>
+    <div><label>Cel: URL zawiera</label><input id="goalUrl" value="sukces"></div>
+    <div class="wide"><label>Grupa docelowa (opcjonalnie: persony zostaną wygenerowane z opisu; cechy zachowania i tak są losowane z badań)</label><input id="audience" placeholder="np. freelancerzy i małe firmy w Polsce, które dziś wystawiają faktury w Excelu"></div>
+    <div><button class="go" id="go" type="submit">Wypuść hordę 🐝</button></div>
+  </form>
+  <div class="phase" id="phase"></div>
+  <div class="cols" id="cols"></div>
+  <section class="res hidden" id="res">
+    <div class="card"><h3>Wynik</h3><div class="verdict" id="verdict">…</div><div class="vs" id="vs"></div><div class="ci" id="stat"></div></div>
+    <div class="card"><h3>Lejek</h3><div id="funnel"></div></div>
+    <div class="card"><h3>Dlaczego odchodzą</h3><div id="reasons"></div></div>
+  </section>
+  <div class="card insight hidden" id="insight"></div>
+  <div class="quotes" id="quotes"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+$('urlA').value = location.origin + '/demo/a/';
+$('urlB').value = location.origin + '/demo/b/';
+const COLORS = { A: 'var(--a)', B: 'var(--b)' };
+const REASON = { cena:'za drogo', ukryte_koszty:'ukryte koszty', zaufanie:'brak zaufania', niejasna_wartosc:'nie wiem, co to jest', za_dlugi_formularz:'za długi formularz', wymuszone_konto:'wymuszone konto', nie_dziala:'coś nie działa', nuda:'znudził się', inne:'inne', limit_budzetu:'limit budżetu', blad_modelu:'błąd modelu', przerwane:'przerwane' };
+let S = null; // stan przebiegu
+let t0 = 0, timer = null;
+
+$('cfg').onsubmit = async e => {
+  e.preventDefault();
+  const body = { urlA: $('urlA').value.trim(), urlB: $('urlB').value.trim(), agents: +$('agents').value, goalUrl: $('goalUrl').value.trim(), audience: $('audience').value.trim() };
+  $('go').disabled = true;
+  const r = await fetch('/api/run', { method: 'POST', body: JSON.stringify(body) });
+  if (!r.ok) { alert(await r.text()); $('go').disabled = false; }
+};
+
+function reset(ev) {
+  S = { personas: Object.fromEntries(ev.personas.map(p => [p.id, p])), variants: ev.variants, agents: {}, n: ev.personas.length };
+  document.body.classList.toggle('single', Object.keys(ev.variants).length === 1);
+  $('cols').innerHTML = Object.entries(ev.variants).map(([v, url]) => `
+    <div class="col"><div class="colh"><span class="vb v${v}">${v}</span><span class="url">${url}</span><span class="big" id="cnt${v}">0/${S.n}</span></div>
+    <div class="bar"><i id="bar${v}" style="width:0"></i></div>
+    <div class="tiles">${ev.personas.map(p => tile(v, p)).join('')}</div></div>`).join('');
+  $('res').classList.add('hidden'); $('insight').classList.add('hidden'); $('quotes').innerHTML = '';
+  t0 = Date.now(); clearInterval(timer); timer = setInterval(() => { const s = (Date.now() - t0) / 1000 | 0; $('t').textContent = `${s / 60 | 0}:${String(s % 60).padStart(2, '0')}`; }, 250);
+}
+function tile(v, p) {
+  return `<div class="tile" id="t${v}${p.id}"><div class="shot" id="s${v}${p.id}"><span class="dev">${p.device === 'mobile' ? '📱' : '💻'}</span><span class="st" id="st${v}${p.id}">czeka</span></div>
+  <div class="who">${p.name}, ${p.age} <span>· ${esc(p.role).slice(0, 48)}</span></div>
+  <div class="think" id="th${v}${p.id}"></div><div class="path" id="p${v}${p.id}"></div></div>`;
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const STATUS = { loading: 'wchodzi', thinking: 'myśli…', acting: 'klika', converted: '✓ konwersja', left: '✗ wyszedł' };
+
+function onAgent(ev) {
+  const k = ev.variant + ev.personaId;
+  const a = S.agents[k] ||= { variant: ev.variant, personaId: ev.personaId };
+  Object.assign(a, { status: ev.status, path: ev.path });
+  if (ev.final) a.final = ev.final;
+  const el = $('t' + k); if (!el) return;
+  el.className = 'tile ' + ev.status;
+  $('st' + k).textContent = STATUS[ev.status] || ev.status;
+  if (ev.shot) $('s' + k).style.backgroundImage = `url(data:image/jpeg;base64,${ev.shot})`;
+  if (ev.status === 'left' && ev.quote) $('th' + k).innerHTML = `<b style="color:var(--bad)">${esc(REASON[ev.reason] || ev.reason)}:</b> „${esc(ev.quote)}”`;
+  else if (ev.think) $('th' + k).textContent = '💭 ' + ev.think;
+  else if (ev.status === 'converted') $('th' + k).innerHTML = '<b style="color:var(--ok)">Skonwertował(a)!</b>';
+  $('p' + k).textContent = (ev.path || []).join(' → ');
+  live();
+}
+
+function live() {
+  const vs = Object.keys(S.variants);
+  const sum = {};
+  for (const v of vs) {
+    const as = Object.values(S.agents).filter(a => a.variant === v);
+    const conv = as.filter(a => a.status === 'converted').length;
+    const done = as.filter(a => a.status === 'converted' || a.status === 'left').length;
+    $('cnt' + v).textContent = `${conv}/${S.n}`;
+    $('bar' + v).style.width = (100 * conv / S.n) + '%';
+    sum[v] = { conv, done, as };
+  }
+  // Lejek na żywo
+  const pos = {};
+  for (const a of Object.values(S.agents)) (a.path || []).forEach((s, i) => (pos[s] ||= []).push(i));
+  const steps = Object.keys(pos).sort((x, y) => avg(pos[x]) - avg(pos[y])).slice(0, 8);
+  const funnel = steps.map(s => ({ step: s, ...Object.fromEntries(vs.map(v => [v, sum[v].as.filter(a => (a.path || []).includes(s)).length])) }));
+  drawFunnel(funnel, vs);
+  $('res').classList.remove('hidden');
+  const reasons = {};
+  for (const v of vs) { reasons[v] = {}; for (const a of sum[v].as) if (a.status === 'left' && a.final?.reason) reasons[v][a.final.reason] = (reasons[v][a.final.reason] || 0) + 1; }
+  drawReasons(reasons, vs);
+  if (!S.done) {
+    $('verdict').textContent = 'Horda w trakcie…';
+    $('vs').innerHTML = vs.map(v => `<div><span class="vb v${v}">${v}</span><div class="big">${sum[v].conv}/${sum[v].done || 0}</div><div class="ci">skończyło ${sum[v].done}/${S.n}</div></div>`).join('');
+  }
+}
+const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+function drawFunnel(funnel, vs) {
+  $('funnel').innerHTML = funnel.map(f => `<div class="fstep"><div class="lbl">${esc(f.step)}</div>${vs.map(v => `<div class="fb"><i style="width:${Math.max(2, 85 * f[v] / S.n)}%;background:${COLORS[v]}"></i><span>${f[v]}/${S.n}</span></div>`).join('')}</div>`).join('');
+}
+function drawReasons(reasons, vs) {
+  const keys = [...new Set(vs.flatMap(v => Object.keys(reasons[v])))].sort((x, y) => vs.reduce((s, v) => s + (reasons[v][y] || 0) - (reasons[v][x] || 0), 0));
+  $('reasons').innerHTML = keys.length ? keys.map(k => `<div class="reason"><span>${esc(REASON[k] || k)}</span><span>${vs.map(v => `<span style="color:${COLORS[v]};margin-left:10px">${v}: ${reasons[v][k] || 0}</span>`).join('')}</span></div>`).join('') : '<div class="ci">Jeszcze nikt nie wyszedł.</div>';
+}
+const pct = x => (100 * x).toFixed(0) + '%';
+function onDone(sm) {
+  S.done = true; clearInterval(timer);
+  const vs = Object.keys(sm.variants);
+  $('vs').innerHTML = vs.map(v => { const s = sm.variants[v]; return `<div><span class="vb v${v}">${v}</span><div class="big">${pct(s.rate)}</div><div class="ci">${s.conv}/${s.n} · 95% CI ${pct(s.ci[0])}–${pct(s.ci[1])}<br>śr. nastrój ${s.avgMood ? s.avgMood.toFixed(1) : '–'}/5 · ${s.avgSteps.toFixed(1)} kroków</div></div>`; }).join('');
+  if (sm.paired) {
+    const A = sm.variants.A, B = sm.variants.B, p = sm.paired.p;
+    const better = B.rate > A.rate ? 'B' : B.rate < A.rate ? 'A' : null;
+    const lift = A.rate ? ((B.rate - A.rate) / A.rate * 100).toFixed(0) : null;
+    $('verdict').innerHTML = !better ? 'Remis.' : p < 0.05
+      ? `Wariant <span style="color:${COLORS[better]}">${better}</span> wygrywa${better === 'B' && lift !== null ? ` (+${lift}% konwersji)` : ''}.`
+      : `Wariant <span style="color:${COLORS[better]}">${better}</span> prowadzi, ale to jeszcze może być szum.`;
+    $('stat').innerHTML = `Te same persony przeszły oba warianty. Test McNemara (dokładny): tylko na B skonwertowało ${sm.paired.onlyB}, tylko na A ${sm.paired.onlyA}, p = ${p.toFixed(3)}${p < 0.05 ? ' (istotne)' : ' (zwiększ liczbę person)'}.`;
+  } else {
+    const s = sm.variants[vs[0]];
+    $('verdict').textContent = `Konwersja ${pct(s.rate)} (${s.conv}/${s.n}).`;
+  }
+  drawFunnel(sm.funnel, vs);
+  const reasons = Object.fromEntries(vs.map(v => [v, sm.variants[v].reasons]));
+  drawReasons(reasons, vs);
+  const quotes = vs.flatMap(v => sm.variants[v].quotes.map(q => ({ ...q, v })));
+  $('quotes').innerHTML = quotes.filter(q => !q.converted).map(q => { const p = S.personas[q.personaId]; return `<div class="q"><span class="vb v${q.v}" style="font-size:10px">${q.v}</span> „${esc(q.quote)}”<small>${esc(p?.name)}, ${p?.age} · ${esc(p?.role)} · odpadł(a) na: <b>${esc(q.lastStep)}</b> · ${esc(REASON[q.reason] || q.reason)}</small></div>`; }).join('');
+  const ins = sm.insight;
+  if (ins) {
+    $('insight').classList.remove('hidden');
+    $('insight').innerHTML = `<h3>🧠 Analityk</h3><div class="verdict" style="font-size:18px">${esc(ins.headline)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:8px">
+    <div><b>Gdzie tracisz ludzi</b><ul>${(ins.findings || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+    <div><b>Co przetestować dalej</b><ul>${(ins.fixes || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div></div>
+    <p class="ci" style="margin-top:12px">To symulacja na personach-agentach: traktuj ją jako szybki filtr hipotez przed testem na prawdziwym ruchu, nie jako jego zamiennik.</p>`;
+  }
+  $('go').disabled = false;
+}
+
+const es = new EventSource('/api/events');
+es.onmessage = m => {
+  const ev = JSON.parse(m.data);
+  if (ev.type === 'hello') { $('go').disabled = ev.running; $('model').textContent = 'model: ' + (ev.models?.[0] || '–'); if (!ev.hasKey) $('phase').textContent = '⚠️ Brak OPENROUTER_API_KEY w .env'; }
+  if (ev.type === 'phase') $('phase').textContent = ev.text;
+  if (ev.type === 'start') { reset(ev); $('phase').textContent = `${ev.personas.length} person × ${Object.keys(ev.variants).length} wariant(y) rusza…`; }
+  if (ev.type === 'agent' && S) onAgent(ev);
+  if (ev.type === 'cost') { $('cost').textContent = '$' + ev.spent.toFixed(4); $('calls').textContent = ev.calls; if (ev.model) $('model').textContent = 'model: ' + ev.model; }
+  if (ev.type === 'done') { $('phase').textContent = 'Gotowe.'; onDone(ev.summary); }
+  if (ev.type === 'error') { $('phase').textContent = '❌ ' + ev.text; $('go').disabled = false; clearInterval(timer); }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Fakturix – płatność</title><link rel="stylesheet" href="../style.css"></head><body>
+<nav><b>Fakturix</b><div><a href="index.html">Produkt</a><a href="cennik.html">Cennik</a><a href="#">Kontakt</a></div></nav>
+<div class="wrap" style="max-width:560px"><h1>Aktywuj okres próbny</h1><p class="muted">Krok 3 z 3. Aby rozpocząć 14-dniowy okres próbny, podaj dane karty. Po okresie próbnym subskrypcja odnowi się automatycznie.</p>
+<div class="row"><span>Plan Start (rocznie, 12 × 39 zł)</span><span>468,00 zł</span></div>
+<div class="row"><span>Opłata aktywacyjna (jednorazowa)</span><span>49,00 zł</span></div>
+<div class="row"><span>VAT 23%</span><span>118,91 zł</span></div>
+<div class="row total"><span>Do zapłaty po okresie próbnym</span><span>635,91 zł</span></div>
+<div class="row"><span>Pobierzemy dziś (weryfikacja + aktywacja)</span><span>49,00 zł</span></div>
+<form id="p"><label for="c1">Numer karty</label><input id="c1" inputmode="numeric"><label for="c2">Data ważności</label><input id="c2" placeholder="MM/RR"><label for="c3">CVC</label><input id="c3">
+<div class="err" id="err"></div><button class="btn" type="submit">Zapłać i aktywuj</button></form></div>
+<script>document.getElementById('p').onsubmit=e=>{e.preventDefault();if(document.getElementById('c1').value.replace(/\s/g,'').length<12){document.getElementById('err').textContent='Podaj poprawny numer karty.';return}location.href='sukces.html'}</script></body></html>
