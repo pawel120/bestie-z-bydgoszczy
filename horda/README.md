@@ -13,6 +13,10 @@ Po około minucie masz:
 - **podsumowanie analityka** z 3 problemami i 3 zmianami do przetestowania,
 - **koszt przebiegu** (zwykle ułamek centa) i podgląd na żywo, co widzi i myśli każdy agent.
 
+![Horda w akcji](docs/demo.gif)
+
+Wideo (10 s, 16 person × A/B): [`docs/demo.mp4`](docs/demo.mp4)
+
 ## Uruchomienie
 
 ```bash
