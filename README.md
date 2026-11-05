@@ -5,7 +5,7 @@ https://meet.google.com/meet/grh-evig-uez
 wejdź na link i powiedzcie żeby zbrainstormował apke todolist w kosmosie :)
 
 ## co to
-https://www.youtube.com/watch?v=aJiC12ssPNo 
+https://www.youtube.com/watch?v=8bTlqZVoiAI
 
 
 meetingi w czasach AI są za wolne - meat proxowanie jest dla slabych. my zamykamy tą pętle i nasi agenci grzeją pomysły na bieżąco w trakcie spotkania - nic nie musi nic instalowac, wszystko dzieje sie po prostu na google meet.
