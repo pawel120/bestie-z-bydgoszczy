@@ -104,6 +104,14 @@ opóźnieniami (nie agentem) i po teście usunęliśmy je z `sessions.jsonl`. Zr
 
 ![Prawdziwe sesje i kalibracja](docs/screenshot.png)
 
+## Prawdziwe strony (tryb bezpieczny)
+
+Dla adresów spoza localhost (albo z `HORDE_SAFE=1`) horda nie wypełnia ani nie wysyła formularzy, blokuje wszystkie żądania
+inne niż GET, ogranicza się do 6 kroków i 4 agentów naraz, a celem jest **intencja** (regex URL, np.
+`sign-?up|pricing|download|demo`). Na banerach cookies wybiera „Odrzuć” / „Tylko niezbędne”. Blokady anty-bot
+(Cloudflare, DataDome) kończą się wynikiem `zablokowane` bez prób obejścia. Wyniki testu na x.ai, e2e.com, inpost.pl,
+linear.app vs notion.com i allegro.pl: [`docs/field-test.md`](docs/field-test.md).
+
 ## Dlaczego to nie jest „LLM zgaduje”
 
 1. **Persony nie są wymyślane przez model.** Modele zbiegają do mediany, więc persony „z LLM” są do siebie podobne.

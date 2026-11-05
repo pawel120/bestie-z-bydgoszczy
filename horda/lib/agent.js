@@ -114,7 +114,8 @@ export async function runAgent({ browser, persona, variant, startUrl, goal, llm,
       if (await reachedGoal()) { result.converted = true; break; }
       const state = await page.evaluate(EXTRACT);
       // Ochrona przed botami (Cloudflare itp.) to nie decyzja człowieka: kończymy jako błąd techniczny, nie omijamy jej.
-      if (BLOCKED.test(state.title + '\n' + state.text.slice(0, 600))) {
+      const challenge = page.frames().some(f => /captcha|datadome|challenges\.cloudflare|cf-chl|perimeterx|hcaptcha|recaptcha\/api2\/bframe/i.test(f.url()));
+      if (challenge || BLOCKED.test(state.title + '\n' + state.text.slice(0, 600))) {
         result.reason = 'zablokowane'; result.quote = 'Strona zablokowała automatyczną przeglądarkę (ochrona przed botami).';
         send({ status: 'left', reason: result.reason, quote: result.quote, shot: await shot() });
         break;
@@ -388,4 +389,4 @@ async function dismissConsent(page) {
   return 'brak przycisku odrzuć';
 }
 
-const BLOCKED = /you have been blocked|attention required|verify you are (a )?human|just a moment\.\.\.|checking your browser|access denied|are you a robot|captcha|unusual traffic|request blocked|px-captcha/i;
+const BLOCKED = /you have been blocked|attention required|verify you are (a )?human|just a moment\.\.\.|checking your browser|access denied|are you a robot|captcha|unusual traffic|request blocked|px-captcha|zostałeś zablokowan|zostałaś zablokowan|dostęp zablokowany|nie jesteś robotem|potwierdź, że jesteś człowiekiem/i;
