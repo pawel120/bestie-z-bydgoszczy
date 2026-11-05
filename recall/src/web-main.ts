@@ -127,13 +127,6 @@ const api: BestieApi = {
       ? replicateProduct(key("anthropic"), (html) => productListeners.forEach((l) => l(html)), new AbortController().signal)
       : null,
   onProductPartial: (listener) => void productListeners.push(listener),
-  // Horda (A/B tests with personas) runs a local Node server: desktop only.
-  prepareHorda: async () => {
-    throw new Error("Horda A/B działa tylko w aplikacji desktop");
-  },
-  runHorda: async () => {
-    throw new Error("Horda A/B działa tylko w aplikacji desktop");
-  },
   onCosts: (listener) => watchCosts(listener),
   resetCosts: async () => resetCosts(),
   saveBoard: async (items) => void (board = items),
@@ -228,9 +221,8 @@ if (viewing) viewLive();
 
 window.bestie = api;
 
-// In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable),
-// and no Horda buttons (desktop only).
-document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel, .horda-btn { display: none !important; }" }));
+// In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable).
+document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel { display: none !important; }" }));
 if (viewing) throw new Error("live view"); // stop here: the viewer only replays the bot's screen
 await import("../../src/renderer/app.mts");
 if (config.bot && config.live) pushLive();
