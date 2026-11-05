@@ -1,0 +1,19 @@
+/* Agent cursors keep a constant size on screen: --z is the canvas zoom. */
+.agent-cursor {
+  position: absolute; top: 0; left: 0; z-index: 50; opacity: 0; pointer-events: none; transform-origin: 0 0;
+  transition: transform 1s cubic-bezier(.3, .7, .2, 1), opacity .4s;
+}
+.agent-cursor.active { opacity: 1; }
+.agent-cursor svg { display: block; width: 22px; height: 22px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .35)); }
+.agent-cursor path { fill: var(--c); stroke: #fff; stroke-width: 1.6; stroke-linejoin: round; }
+.agent-cursor .tag {
+  position: absolute; top: 18px; left: 16px; padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+  color: #fff; background: var(--c); font: 600 12px Inter, "Segoe UI", system-ui, sans-serif;
+}
+.agent-cursor .bubble {
+  position: absolute; top: 44px; left: 16px; max-width: 220px; padding: 4px 9px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 10px; color: var(--text); background: var(--surface);
+  font: 500 11.5px Inter, "Segoe UI", system-ui, sans-serif; text-overflow: ellipsis; white-space: nowrap;
+}
+.agent-cursor .bubble:empty { display: none; }
+@media (prefers-reduced-motion: reduce) { .agent-cursor { transition: opacity .4s; } }

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bestie Room</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/agents.css">
+</head>
+<body>
+  <form id="join" class="join">
+    <div class="join-box">
+      <h1>Dołącz do burzy mózgów</h1>
+      <label>Twoje imię <input id="name" required maxlength="40" autocomplete="name"></label>
+      <label>Język rozmowy
+        <select id="lang">
+          <option value="pl-PL">Polski</option>
+          <option value="en-US">English</option>
+        </select>
+      </label>
+      <p class="consent">Rozmowa będzie transkrybowana i widoczna dla wszystkich w pokoju. Tekst trafia też do sesji Claude, która rysuje na tablicy. Mowę rozpoznaje przeglądarka przez usługę swojego dostawcy. Aplikacja nie zapisuje dźwięku.</p>
+      <button class="primary" type="submit">Dołączam i zgadzam się</button>
+      <p id="joinError" class="error" hidden></p>
+    </div>
+  </form>
+
+  <div id="app" class="app" hidden>
+    <header class="toolbar">
+      <strong class="brand">Bestie Room</strong>
+      <div id="people" class="people"></div>
+      <span class="spacer"></span>
+      <span id="offline" class="status over" hidden>Brak połączenia z pokojem</span>
+      <span id="brainStatus" class="status"></span>
+      <span id="budget" class="status" title="Wydano w tej sesji / limit"></span>
+      <span id="micStatus" class="status"></span>
+      <button id="mic" class="primary" type="button">Włącz mikrofon</button>
+      <button id="fit" class="ghost" type="button">Całość</button>
+      <label class="ghost follow"><input id="follow" type="checkbox" checked> Śledź</label>
+      <button id="clear" class="ghost" type="button">Wyczyść tablicę</button>
+    </header>
+    <main class="stage">
+      <aside class="rail">
+        <h2>Rozmowa</h2>
+        <div id="lines" class="lines" aria-live="polite"></div>
+      </aside>
+      <section id="canvas" class="canvas">
+        <div id="world" class="world">
+          <svg id="links" class="links" aria-hidden="true">
+            <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
+          </svg>
+        </div>
+        <p id="empty" class="empty">Zacznijcie rozmawiać. Pomysły pojawią się tutaj.</p>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

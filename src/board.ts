@@ -52,7 +52,16 @@ export const GROQ_MODEL = "openai/gpt-oss-120b";
 /** Groq model that draws the cards when no Claude key is set; e.g. BESTIE_DESIGNER_MODEL=qwen/qwen3.8-27b. */
 const DESIGNER_MODEL = process.env.BESTIE_DESIGNER_MODEL || GROQ_MODEL;
 /** With a Claude key, cards are drawn by Opus in fast mode: ~0.7 s to first token, ~390 tok/s, best-looking cards. */
-const CLAUDE_DESIGNER_MODEL = "claude-opus-5-5";
+const CLAUDE_DESIGNER_MODEL = process.env.BESTIE_CLAUDE_MODEL || "claude-opus-5-5";
+/** Model that plans the board; defaults to the one that draws. */
+const CLAUDE_PLAN_MODEL = process.env.BESTIE_PLAN_MODEL || CLAUDE_DESIGNER_MODEL;
+
+type Usage = { input_tokens?: number | null; output_tokens?: number | null; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null };
+let usageListener: (model: string, usage: Usage) => void = () => {};
+/** Tells the host what every Claude call cost in tokens, e.g. to enforce a budget. */
+export function reportUsage(listener: (model: string, usage: Usage) => void) {
+  usageListener = listener;
+}
 const JEV_MODEL = "typesafe/jev-1.14";
 
 // Running cost of the board, per provider, in USD. Jev reports its own cost; Groq and Claude are computed from token
@@ -311,11 +320,12 @@ export async function gateBoard(apiKey: string, recent: string, board: CardMeta[
   };
 }
 
+/** Fast mode exists only on Opus and costs a premium, so it stays off when a cheaper model is chosen. */
 const claudeDefaults = {
   model: CLAUDE_DESIGNER_MODEL,
-  speed: "fast" as const,
-  betas: ["fast-mode-2026-02-01", "server-side-fallback-2026-07-01"],
-  fallbacks: "default" as const,
+  ...(process.env.BESTIE_CLAUDE_MODEL
+    ? {}
+    : { speed: "fast" as const, betas: ["fast-mode-2026-02-01", "server-side-fallback-2026-07-01"], fallbacks: "default" as const }),
   output_config: { effort: "low" as const },
 };
 
@@ -357,6 +367,7 @@ async function planWithClaude(apiKey: string, content: string, ideating: boolean
   const client = new Anthropic({ apiKey });
   const message = await client.beta.messages.create({
     ...claudeDefaults,
+    model: CLAUDE_PLAN_MODEL,
     max_tokens: 8_000,
     // Low effort keeps plans at ~2–4 s; BESTIE_PLAN_EFFORT=medium gives requests for ideas more thought.
     output_config: { effort: process.env.BESTIE_PLAN_EFFORT === "medium" && ideating ? "medium" : "low", format: { type: "json_schema", schema: PLAN_SCHEMA } },
@@ -364,6 +375,7 @@ async function planWithClaude(apiKey: string, content: string, ideating: boolean
     messages: [{ role: "user", content }],
   });
   addClaudeUsage(message.usage);
+  usageListener(CLAUDE_PLAN_MODEL, message.usage);
   if (message.stop_reason === "refusal") throw new Error("Claude odmówił zaplanowania tablicy.");
   const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
   return (JSON.parse(text) as { ops: PlanOp[] }).ops;
@@ -446,6 +458,7 @@ async function drawWithClaude(
   });
   const message = await stream.finalMessage();
   addClaudeUsage(message.usage);
+  usageListener(CLAUDE_DESIGNER_MODEL, message.usage);
   if (message.stop_reason === "refusal") throw new Error("Claude odmówił narysowania tej karty.");
   return html;
 }
@@ -495,6 +508,7 @@ export async function replicateProduct(apiKey: string, onPartial: (html: string)
   });
   const message = await stream.finalMessage();
   addClaudeUsage(message.usage);
+  usageListener(CLAUDE_DESIGNER_MODEL, message.usage);
   if (message.stop_reason === "refusal") throw new Error("Claude odmówił odtworzenia strony.");
   const source = stripFences(html).trim();
   return { source, html: await inlineTailwind(source) };
@@ -573,6 +587,7 @@ async function editWithClaude(
     });
     const message = await stream.finalMessage();
     addClaudeUsage(message.usage);
+    usageListener(CLAUDE_DESIGNER_MODEL, message.usage);
     if (message.stop_reason === "refusal") throw new Error("Claude odmówił edycji tej karty.");
     if (message.stop_reason !== "tool_use" || results.every((r) => !r.is_error)) break;
     messages.push({ role: "assistant", content: message.content }, { role: "user", content: results });
