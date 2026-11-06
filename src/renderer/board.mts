@@ -38,7 +38,7 @@ const GATE_LABEL: Record<string, string> = {
 };
 /** Talking to the board directly always goes straight to the planner. */
 /** Words that may mean the internet is wanted. Only then does a small model read the lines, so other talk costs nothing. */
-const INTERNET_HINT = /internet|sie[cć]i?\b|sprawd[zź]|zbadaj|zresearch|zriser|research|konkurenc|wejd[zź]|poszukaj|wyszukaj|znajd[zź]|zdj[eę]ci|fotk|grafik|obraz|inspirac|film|wideo|video|youtube|jutub|subway|w[lł][aą]cz|wy[lł][aą]cz|odpal/iu;
+const INTERNET_HINT = /internet|pinter|prawdziw|napisz|wypisz|przybli|oddal|zoom|powi[eę]ksz|poka[zż]|ca[lł]o[sś][cć]|kart[eęa]|slajd|sie[cć]i?\b|sprawd[zź]|zbadaj|zresearch|zriser|research|konkurenc|wejd[zź]|poszukaj|wyszukaj|znajd[zź]|zdj[eę]ci|fotk|grafik|obraz|inspirac|film|wideo|video|youtube|jutub|subway|w[lł][aą]cz|wy[lł][aą]cz|odpal/iu;
 const DIRECT_REQUEST = /\b(ai|aj|ej ai|tablic\w*|bestie)\b.*\b(pokaż|pokaz|zaprojektuj|narysuj|zrób|zrob|wymyśl|wymysl|zaproponuj|show|design|draw)|\b(pokaż|zaprojektuj|narysuj|wymyśl|zaproponuj)\w*\s+(mi|nam)?\s*(pomys|mockup|ekran|wersj|landing)/i;
 /** Ask the gate this long after the conversation last changed… */
 const DEBOUNCE_MS = 1_200;
@@ -146,6 +146,19 @@ const svg = (paths: string) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
 
 /** Strips anything executable from model-written HTML (the app CSP blocks inline handlers too). */
+const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** What the agent is doing on the internet right now, as a card: the newest steps, and the page it is on. */
+function searchProgress(topic: string, steps: string[], image?: string) {
+  const list = steps
+    .slice(-9)
+    .map((step, i, shown) => `<li style="margin-bottom:10px;${i === shown.length - 1 ? "color:#6d4aff;font-weight:600" : "color:#52525b"}">${escapeHtml(step)}</li>`)
+    .join("");
+  const text = `<h1 style="margin:0 0 22px;font-size:26px;line-height:1.2">${escapeHtml(topic)}</h1><ul style="margin:0;padding-left:22px;font-size:19px;line-height:1.3">${list}</ul>`;
+  const page = image ? `<img alt="Otwieram stronę…" style="flex:1;min-width:0;height:100%;object-fit:cover;object-position:top;border-radius:10px;background:#f4f4f5;color:#71717a;font-size:20px" src="${escapeHtml(image)}">` : "";
+  return `<body style="margin:0;height:600px;box-sizing:border-box;padding:32px;font-family:Inter,'Segoe UI',system-ui,sans-serif;color:#18181b"><div style="display:flex;gap:24px;height:100%"><div style="width:${image ? "320px" : "100%"};flex-shrink:0;overflow:hidden">${text}</div>${page}</div></body>`;
+}
+
 function sanitize(doc: Document) {
   doc.querySelectorAll("script, iframe, object, embed, link, meta, base, form").forEach((el) => el.remove());
   for (const el of doc.querySelectorAll("*")) {
@@ -220,6 +233,7 @@ export class Whiteboard {
     private statusEl: HTMLElement,
     private onError: (message: string) => void,
   ) {
+    api.onInternetStep((step) => this.onWebStep?.(step));
     api.onBoardPartial((id, html) => {
       const card = this.cards.get(id);
       if (card?.drawing) this.setContent(card, html);
@@ -416,9 +430,11 @@ export class Whiteboard {
     this.clearTimers();
     this.busy = true;
     try {
-      if (INTERNET_HINT.test(fresh.join(" "))) {
+      // With photos on the board, any line may be choosing one of them.
+      if (this.lastPhotos.length || INTERNET_HINT.test(fresh.join(" "))) {
         this.setStatus("Słucham…");
-        const context = this.lines.slice(Math.max(0, this.plannedLines - 6), this.plannedLines).join("");
+        const titles = [...this.cards.values()].map((c, i) => `${i + 1}. ${c.item.title}`).join("\n");
+        const context = `Cards on the board:\n${titles || "(none)"}\n\n${this.lines.slice(Math.max(0, this.plannedLines - 6), this.plannedLines).join("")}`;
         const wanted = await this.api.internetIntent(context, fresh.join("")).catch((err) => {
           this.onError(String(err));
           return [];
@@ -473,8 +489,18 @@ export class Whiteboard {
 
   // MARK: - Internet
 
-  private async useInternet({ action, topic, intoPage }: { action: string; topic: string; intoPage: boolean }, said: string) {
+  private onWebStep: ((step: string, image?: string) => void) | null = null;
+  /** The numbered photos last shown on the board. */
+  private lastPhotos: string[] = [];
+
+  private async useInternet(
+    { action, topic, intoPage, photoNumber, cameraMove, cardNumber }: { action: string; topic: string; intoPage: boolean; photoNumber: number; cameraMove: string; cardNumber: number },
+    said: string,
+  ) {
     if (action === "stop_video") return this.showVideo(null);
+    if (action === "text") return this.writeText(topic, said.match(/\[(\d+:\d+)\]/)?.[1] ?? "");
+    if (action === "camera") return this.moveCamera(cameraMove, cardNumber);
+    if (action === "use_photo") return this.usePhoto(topic, photoNumber);
     const notes: Record<string, string> = { research: "szuka w sieci…", photos: "szuka grafik…", video: "szuka filmu…" };
     const agent = this.cursor(action === "research" ? "Researcher" : "Agent 1");
     agent.work(this.nextSlotRect(), notes[action] ?? "");
@@ -486,16 +512,32 @@ export class Whiteboard {
         this.showVideo(video);
       } else if (action === "photos") {
         const { urls, html } = await this.api.findImages(topic);
+        this.lastPhotos = urls;
+        this.fillWebCard(this.webCard(topic, at), topic, html);
         const page = intoPage ? this.pageBeingBuilt() : undefined;
-        if (page) this.putPhotos(page, topic, urls);
-        else this.fillWebCard(this.webCard(topic, at), topic, html);
+        if (page && urls[0]) this.putPhotos(page, topic, urls[0]);
       } else {
         const card = this.webCard(`Sprawdzam: ${topic}`.slice(0, 120), at);
         this.setDrawing(card, true);
+        const steps = ["Zaczynam szukać…"];
+        let image: string | undefined;
+        const show = () => this.setContent(card, searchProgress(topic, steps, image));
+        show();
+        this.onWebStep = (step, shot) => {
+          steps.push(step);
+          image = shot ?? image;
+          agent.say(step);
+          show();
+        };
         try {
           const { title, html } = await this.api.researchWeb(topic, this.lines.slice(-12).join(""));
           this.fillWebCard(card, title, html);
+        } catch (err) {
+          steps.push("Nie udało się dokończyć wyszukiwania.");
+          show();
+          throw err;
         } finally {
+          this.onWebStep = null;
           this.setDrawing(card, false);
         }
       }
@@ -506,18 +548,52 @@ export class Whiteboard {
 
   /** The newest drawn card that isn't itself an internet result. */
   private pageBeingBuilt() {
-    return [...this.cards.values()].filter((c) => c.item.thread !== "internet" && c.item.source).at(-1);
+    return [...this.cards.values()].filter((c) => !["internet", "notatki"].includes(c.item.thread) && c.item.source).at(-1);
   }
 
-  private putPhotos(card: Card, topic: string, urls: string[]) {
+  private photoBrief(topic: string, url: string) {
+    return `${topic}\nUse this exact photo with <img src> and object-cover, unchanged. Never draw, recreate or restyle it, and if the page already has an image of this subject, replace that image with this photo. This replaces the rule against external images, for exactly this URL:\n${url}`;
+  }
+
+  private putPhotos(card: Card, topic: string, url: string) {
     const { source: _source, html: _html, ...meta } = card.item;
-    const brief = `${topic}\nPut these real photos into the page with <img src> and object-cover, where they fit best. This replaces the rule against external images, for exactly these URLs:\n${urls.join("\n")}`;
-    this.apply({ ...meta, op: "edit", brief, explore: [] }, this.marked());
+    this.apply({ ...meta, op: "edit", brief: this.photoBrief(topic, url), explore: [] }, this.marked());
   }
 
-  private webCard(title: string, at: string) {
-    const id = this.uniqueId("internet", (taken) => this.cards.has(taken));
-    const item = { id, thread: "internet", threadTitle: "Internet", kind: "idea" as const, title, summary: title, from: "", quote: "", at, source: "", html: "" };
+  /** "Take the third one": that exact photo goes into the page, or into a new graphic when there is no page yet. */
+  private usePhoto(topic: string, number: number) {
+    const url = this.lastPhotos[number - 1];
+    if (!url) return this.onError(`Nie wiem, które zdjęcie wybrać. Powiedz numer, od 1 do ${this.lastPhotos.length}.`);
+    const page = this.pageBeingBuilt();
+    if (page) return this.putPhotos(page, topic, url);
+    const id = this.uniqueId("grafika", (taken) => this.cards.has(taken));
+    this.apply({ op: "create", id, thread: "grafika", threadTitle: "Grafika", from: "", kind: "mockup", title: topic.slice(0, 80), summary: topic, quote: "", at: "", brief: this.photoBrief(topic, url), explore: [] }, this.marked());
+  }
+
+  /** Just the words on the board, with no slide around them. */
+  private writeText(text: string, at: string) {
+    const card = this.webCard(text.slice(0, 120), at, "notatki", "Notatki");
+    card.el.classList.add("plain");
+    const size = text.length > 40 ? 64 : 120;
+    this.fillWebCard(card, text, `<body style="margin:0;height:600px;display:flex;align-items:center;font:700 ${size}px/1.1 Inter,'Segoe UI',system-ui,sans-serif;color:#18181b">${escapeHtml(text)}</body>`);
+  }
+
+  private moveCamera(move: string, number: number) {
+    if (move === "all") return this.fitAll(true);
+    if (move === "in" || move === "out") {
+      const { width, height } = this.viewport.getBoundingClientRect();
+      return this.zoomAt(width / 2, height / 2, move === "in" ? 1.6 : 0.6, true);
+    }
+    const cards = [...this.cards.values()];
+    const card = cards[number - 1] ?? cards.at(-1);
+    if (!card) return;
+    this.follow = true;
+    this.focusOn(card);
+  }
+
+  private webCard(title: string, at: string, thread = "internet", threadTitle = "Internet") {
+    const id = this.uniqueId(thread, (taken) => this.cards.has(taken));
+    const item = { id, thread, threadTitle, kind: "idea" as const, title, summary: title, from: "", quote: "", at, source: "", html: "" };
     const card = this.createCard(item, this.lane(item.thread, item.threadTitle));
     this.drawLinks();
     this.focusOn(card);

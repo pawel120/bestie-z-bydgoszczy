@@ -17,6 +17,9 @@ export interface PageConfig {
 }
 
 export function readConfig(): PageConfig {
+  // local.mjs hands the page its settings, so the plain address is all you need.
+  const local = (window as { BESTIE_LOCAL?: PageConfig }).BESTIE_LOCAL;
+  if (local) return local;
   const raw = new URLSearchParams(location.hash.slice(1)).get("c");
   if (!raw) return {};
   try {

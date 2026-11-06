@@ -14,9 +14,15 @@ import { fileURLToPath } from "node:url";
 
 const BRIDGE_PORT = Number(process.env.BRIDGE_PORT || 4310);
 const CALL_TIMEOUT = 180_000;
+const SEARCH_TIMEOUT = 25_000;
+const SHOT_LIMIT = 2; // each screenshot is a whole Chrome
+const SHOT_TIMEOUT = 12_000; // a heavy page must not hold up the ones behind it
+const SHOT_CACHE = 30;
+const CHROME = process.env.CHROME_BIN || "C:/Program Files/Google/Chrome/Application/chrome.exe";
 const DRAWING_MODEL = process.env.BESTIE_DRAW_MODEL || "claude-sonnet-5-5";
 const TASK_MODEL = "claude-sonnet-5-5";
 const PAGE = path.join(path.dirname(fileURLToPath(import.meta.url)), "dist");
+const PAGE_CONFIG = { login: true, anthropic: "login", elevenlabs: "browser", lang: "pl", handsfree: true };
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css" };
 const ID_SUFFIX = () => Math.random().toString(36).slice(2, 10);
 
@@ -68,8 +74,10 @@ function promptFor(body) {
 
 /** Streamed requests without tools are cards being drawn; everything else is a task around them. */
 const isDrawing = (body) => body.stream && !body.tools?.length;
+const isSearching = (body) => body.stream && (body.tools ?? []).some(isSearch);
+const SEARCH_TOOLS = { WebSearch: "web_search", WebFetch: "web_fetch" };
 
-function runClaude(body, onText) {
+function runClaude(body, onText, onTool) {
   const dir = mkdtempSync(path.join(tmpdir(), "bestie-"));
   const searches = (body.tools ?? []).some(isSearch) && body.tool_choice?.type !== "none";
   const args = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", isDrawing(body) ? DRAWING_MODEL : TASK_MODEL];
@@ -97,6 +105,7 @@ function runClaude(body, onText) {
       if (event.type === "result") final = event;
       const delta = event.type === "stream_event" && event.event?.delta;
       if (delta?.type === "text_delta") onText?.(delta.text);
+      if (event.type === "assistant") for (const block of event.message?.content ?? []) if (block.type === "tool_use") onTool?.(block);
     };
     child.stdout.on("data", (d) => {
       buffer += d;
@@ -148,14 +157,34 @@ function asStream(message) {
   ].join("");
 }
 
-/** A card shows up while it is written, the same way it does with the real API. */
-async function drawLive(body, res) {
+/** Cards and searches show up while they happen, the same way they do with the real API. */
+async function streamLive(body, res) {
   res.writeHead(200, { "Content-Type": "text/event-stream" });
   const start = asMessage(body, "");
   res.write(sseEvent("message_start", { message: { ...start, content: [], stop_reason: null } }));
-  res.write(sseEvent("content_block_start", { index: 0, content_block: { type: "text", text: "" } }));
-  await runClaude(body, (text) => res.write(sseEvent("content_block_delta", { index: 0, delta: { type: "text_delta", text } })));
-  res.write(sseEvent("content_block_stop", { index: 0 }));
+  let index = 0;
+  let textOpen = false;
+  const closeText = () => {
+    if (!textOpen) return;
+    res.write(sseEvent("content_block_stop", { index: index++ }));
+    textOpen = false;
+  };
+  const onText = (text) => {
+    if (!textOpen) res.write(sseEvent("content_block_start", { index, content_block: { type: "text", text: "" } }));
+    textOpen = true;
+    res.write(sseEvent("content_block_delta", { index, delta: { type: "text_delta", text } }));
+  };
+  const seen = new Set();
+  const onTool = ({ id, name, input }) => {
+    if (!SEARCH_TOOLS[name] || seen.has(id)) return;
+    seen.add(id);
+    closeText();
+    res.write(sseEvent("content_block_start", { index, content_block: { type: "server_tool_use", id, name: SEARCH_TOOLS[name], input: {} } }));
+    res.write(sseEvent("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } }));
+    res.write(sseEvent("content_block_stop", { index: index++ }));
+  };
+  await runClaude(body, onText, onTool);
+  closeText();
   res.write(sseEvent("message_delta", { delta: { stop_reason: "end_turn", stop_sequence: null }, usage: { output_tokens: 0 } }));
   res.end(sseEvent("message_stop", {}));
 }
@@ -167,10 +196,107 @@ function servePage(req, res) {
     return res.end("Nie ma strony: zbuduj ją przez npx vite build");
   }
   res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream" });
+  if (file.endsWith("index.html")) return res.end(readFileSync(file, "utf8").replace("<head>", `<head><script>window.BESTIE_LOCAL=${JSON.stringify(PAGE_CONFIG)}</script>`));
   res.end(readFileSync(file));
 }
 
+/** Pinterest's own search, read the way a browser sees it: it refuses plain requests, and no account is needed. */
+function pinterestImages(query) {
+  return new Promise((resolve) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bestie-chrome-"));
+    const url = `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`;
+    const chrome = spawn(CHROME, ["--headless=new", "--disable-gpu", "--no-first-run", `--user-data-dir=${dir}`, "--virtual-time-budget=7000", "--window-size=1280,1600", "--dump-dom", url]);
+    const timer = setTimeout(() => chrome.kill(), SEARCH_TIMEOUT);
+    let html = "";
+    chrome.stdout.on("data", (d) => (html += d));
+    chrome.on("error", () => resolve([]));
+    chrome.on("close", () => {
+      clearTimeout(timer);
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      const found = [...html.matchAll(/https:\/\/i\.pinimg\.com\/(?:236x|474x|564x)(\/[\w/.-]+\.(?:jpg|png|webp))/g)].map((m) => `https://i.pinimg.com/736x${m[1]}`);
+      resolve([...new Set(found)]);
+    });
+  });
+}
+
+/** Only public pages: Chrome runs on this computer, so local addresses stay out of reach. */
+function isPublicUrl(raw) {
+  try {
+    const { protocol, hostname } = new URL(raw);
+    if (protocol !== "http:" && protocol !== "https:") return false;
+    return !/^(localhost|.*\.local|.*\.internal|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|0\.|\[)/i.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
+const shots = new Map(); // url -> PNG
+const shooting = new Map(); // url -> screenshot in progress, so the card's refreshes share it
+const waitingForShot = [];
+let shotsRunning = 0;
+
+function takeShot(url) {
+  return new Promise((resolve) => {
+    const dir = mkdtempSync(path.join(tmpdir(), "bestie-chrome-"));
+    const file = path.join(dir, "shot.png");
+    const chrome = spawn(CHROME, ["--headless=new", "--disable-gpu", "--no-first-run", "--hide-scrollbars", `--user-data-dir=${dir}`, "--virtual-time-budget=3000", "--window-size=1280,800", `--screenshot=${file}`, url], { stdio: "ignore" });
+    const timer = setTimeout(() => chrome.kill(), SHOT_TIMEOUT);
+    const finish = () => {
+      clearTimeout(timer);
+      const image = existsSync(file) ? readFileSync(file) : null;
+      rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      resolve(image);
+    };
+    chrome.on("error", finish);
+    chrome.on("close", finish);
+  });
+}
+
+function shotOf(url) {
+  if (shots.has(url)) return shots.get(url);
+  if (!shooting.has(url)) shooting.set(url, queueShot(url).finally(() => shooting.delete(url)));
+  return shooting.get(url);
+}
+
+async function queueShot(url) {
+  if (shotsRunning >= SHOT_LIMIT) await new Promise((resolve) => waitingForShot.push(resolve));
+  shotsRunning++;
+  try {
+    const image = await takeShot(url);
+    if (image) {
+      shots.set(url, image);
+      if (shots.size > SHOT_CACHE) shots.delete(shots.keys().next().value);
+    }
+    return image;
+  } finally {
+    shotsRunning--;
+    waitingForShot.shift()?.();
+  }
+}
+
+async function serveShot(req, res) {
+  const url = new URL(req.url, "http://page").searchParams.get("url") ?? "";
+  const image = isPublicUrl(url) ? await shotOf(url) : null;
+  if (!image) {
+    res.writeHead(404);
+    return res.end();
+  }
+  res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "max-age=600" });
+  res.end(image);
+}
+
+async function serveImages(req, res) {
+  const query = new URL(req.url, "http://page").searchParams.get("q") ?? "";
+  const started = Date.now();
+  const urls = query ? await pinterestImages(query.slice(0, 120)) : [];
+  console.log(`[pinterest] ${query}: ${urls.length} zdjęć, ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(urls));
+}
+
 const bridge = http.createServer((req, res) => {
+  if (req.method === "GET" && req.url.startsWith("/images?")) return void serveImages(req, res);
+  if (req.method === "GET" && req.url.startsWith("/shot?")) return void serveShot(req, res);
   if (req.method === "GET") return servePage(req, res);
   const chunks = [];
   req.on("data", (chunk) => chunks.push(chunk));
@@ -180,8 +306,8 @@ const bridge = http.createServer((req, res) => {
       if (req.method !== "POST" || !req.url.startsWith("/v1/messages")) throw new Error(`nieobsługiwane: ${req.url}`);
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       const label = isDrawing(body) ? DRAWING_MODEL : TASK_MODEL;
-      if (isDrawing(body)) {
-        await drawLive(body, res);
+      if (isDrawing(body) || isSearching(body)) {
+        await streamLive(body, res);
       } else {
         const message = asMessage(body, await runClaude(body));
         res.writeHead(200, { "Content-Type": body.stream ? "text/event-stream" : "application/json" });
@@ -199,6 +325,5 @@ const bridge = http.createServer((req, res) => {
 
 await new Promise((resolve) => bridge.listen(BRIDGE_PORT, "127.0.0.1", resolve));
 
-const page = Buffer.from(JSON.stringify({ login: true, anthropic: "login", elevenlabs: "browser", lang: "pl" })).toString("base64url");
 console.log("Claude idzie przez Twoje logowanie. Klucze API są nieużywane.");
-console.log(`Otwórz: http://localhost:${BRIDGE_PORT}/#c=${page}`);
+console.log(`Otwórz: http://localhost:${BRIDGE_PORT}/`);

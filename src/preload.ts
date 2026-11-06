@@ -27,6 +27,9 @@ const api = {
   },
   internetIntent: (earlier: string, fresh: string): Promise<InternetIntent[]> => ipcRenderer.invoke("internet:intent", earlier, fresh),
   researchWeb: (request: string, context: string): Promise<Research> => ipcRenderer.invoke("internet:research", request, context),
+  onInternetStep: (listener: (step: string, image?: string) => void) => {
+    ipcRenderer.on("internet:step", (_e, step: string) => listener(step));
+  },
   findImages: (request: string): Promise<Images> => ipcRenderer.invoke("internet:images", request),
   findVideo: (query: string): Promise<Video | null> => ipcRenderer.invoke("internet:video", query),
   loadProduct: (url: string): Promise<Product> => ipcRenderer.invoke("product:load", url),

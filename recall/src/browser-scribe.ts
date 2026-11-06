@@ -10,11 +10,20 @@ export type { ScribeEvent };
 const useBrowser = readConfig().elevenlabs === "browser";
 let listening = false;
 
-const LOCALES: Record<string, string> = { pl: "pl-PL", en: "en-US" };
+const LOCALES: Record<string, string> = { pl: "pl-PL", pol: "pl-PL", en: "en-US", eng: "en-US" };
+const MESSAGES: Record<string, string> = {
+  "no-speech": "Nie słyszę mowy. Sprawdź, czy przeglądarka używa właściwego mikrofonu.",
+  "not-allowed": "Przeglądarka zablokowała mikrofon. Zezwól na niego przy pasku adresu i odśwież stronę.",
+  "service-not-allowed": "Przeglądarka zablokowała rozpoznawanie mowy.",
+  "audio-capture": "Nie mogę użyć mikrofonu. Sprawdź, czy jest podłączony i czy nie zajmuje go inny program.",
+  network: "Rozpoznawanie mowy nie ma połączenia z internetem.",
+};
 
 class BrowserSpeech {
   private recognition: any = null;
   private active = false;
+  private muted = false;
+  private onMic = (e: Event) => this.setMuted((e as CustomEvent<{ muted: boolean }>).detail.muted);
 
   constructor(
     _getToken: () => Promise<string>,
@@ -25,10 +34,11 @@ class BrowserSpeech {
   async connect() {
     if (listening) return;
     const Recognition = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition;
-    if (!Recognition) throw new Error("Rozpoznawanie mowy działa tylko w Chrome lub Edge.");
+    if (!Recognition) return this.onEvent({ type: "error", message: "Rozpoznawanie mowy działa tylko w Chrome lub Edge." });
     listening = this.active = true;
+    window.addEventListener("bestie-mic", this.onMic);
     this.recognition = new Recognition();
-    this.recognition.lang = LOCALES[this.languageCode ?? ""] ?? navigator.language;
+    this.recognition.lang = LOCALES[this.languageCode ?? ""] ?? "pl-PL";
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
     this.recognition.onresult = (e: any) => {
@@ -42,13 +52,32 @@ class BrowserSpeech {
       if (interim) this.onEvent({ type: "partial", text: interim.trim() });
     };
     this.recognition.onerror = (e: any) => {
-      if (e.error !== "no-speech" && e.error !== "aborted") this.onEvent({ type: "error", message: `Rozpoznawanie mowy: ${e.error}` });
+      if (e.error === "aborted") return;
+      const fatal = e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture";
+      if (fatal) this.active = false; // restarting can't help, and would loop
+      this.onEvent({ type: "error", message: MESSAGES[e.error] ?? `Rozpoznawanie mowy: ${e.error}` });
     };
+    this.recognition.onspeechstart = () => this.onEvent({ type: "error", message: "Słyszę Cię, rozpoznaję…" });
     // Chrome ends recognition after a silence, so keep it going while recording.
     this.recognition.onend = () => {
-      if (this.active) this.recognition.start();
+      if (!this.active || this.muted) return;
+      try {
+        this.recognition.start();
+      } catch {
+        // Already running again.
+      }
     };
     this.recognition.start();
+  }
+
+  private setMuted(on: boolean) {
+    this.muted = on;
+    if (on) return this.recognition.stop();
+    try {
+      this.recognition.start();
+    } catch {
+      // Still stopping: onend starts it again.
+    }
   }
 
   send(_pcm: ArrayBuffer, _commit = false) {}
@@ -56,6 +85,7 @@ class BrowserSpeech {
   async finish() {
     if (!this.active) return;
     this.active = listening = false;
+    window.removeEventListener("bestie-mic", this.onMic);
     this.recognition.stop();
   }
 }

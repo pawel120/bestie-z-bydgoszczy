@@ -34,6 +34,17 @@ let startedAt = 0;
 let timer: number | undefined;
 let audioContext: AudioContext | null = null;
 let streams: MediaStream[] = [];
+let muted = false;
+
+/** Pauses only your microphone: the recording, the transcript and the board keep going. */
+function setMuted(on: boolean) {
+  muted = on;
+  for (const track of streams[0]?.getAudioTracks() ?? []) track.enabled = !on;
+  const button = document.getElementById("mute") as HTMLButtonElement;
+  button.textContent = on ? "Włącz mikrofon" : "Wycisz mikrofon";
+  button.setAttribute("aria-pressed", String(on));
+  window.dispatchEvent(new CustomEvent("bestie-mic", { detail: { muted: on } }));
+}
 let recorder: MediaRecorder | null = null;
 const sessions = new Map<Speaker, ScribeSession>();
 const partials = new Map<Speaker, string>();
@@ -57,6 +68,8 @@ function setState(next: typeof state) {
   replayButton.disabled = next !== "idle" && next !== "replaying";
   replayButton.querySelector("span")!.textContent = next === "replaying" ? "Zatrzymaj" : "Wczytaj transkrypt";
   document.body.classList.toggle("is-recording", next === "recording");
+  (document.getElementById("mute") as HTMLButtonElement).hidden = next !== "recording";
+  if (muted && next !== "recording") setMuted(false);
   recordButton.classList.toggle("recording", next === "recording");
   recordButton.querySelector("span")!.textContent = {
     idle: "Nagrywaj",
@@ -67,6 +80,8 @@ function setState(next: typeof state) {
   }[next];
   languageSelect.disabled = next !== "idle";
 }
+
+document.getElementById("mute")!.addEventListener("click", () => setMuted(!muted));
 
 // MARK: - Transcript rendering
 
@@ -172,9 +187,11 @@ async function start() {
 
   let mic: MediaStream;
   try {
+    setStatus("Czekam na zgodę na mikrofon. Kliknij „Zezwól” przy pasku adresu przeglądarki.");
     mic = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
+    setStatus(null);
   } catch (err) {
     setState("idle");
     setStatus(`Brak dostępu do mikrofonu: ${err}`);
@@ -195,13 +212,20 @@ async function start() {
   startedAt = Date.now();
   streams = system ? [mic, system] : [mic];
 
-  audioContext = new AudioContext({ sampleRate: 48_000 });
-  await audioContext.audioWorklet.addModule("pcm-worklet.mjs");
-  const mix = audioContext.createMediaStreamDestination();
-  await attach(mic, "Ja", audioContext, mix);
-  if (system) await attach(system, "Rozmówcy", audioContext, mix);
+  try {
+    audioContext = new AudioContext({ sampleRate: 48_000 });
+    await audioContext.audioWorklet.addModule("pcm-worklet.mjs");
+    const mix = audioContext.createMediaStreamDestination();
+    await attach(mic, "Ja", audioContext, mix);
+    if (system) await attach(system, "Rozmówcy", audioContext, mix);
+    recorder = new MediaRecorder(mix.stream, { mimeType: "audio/webm;codecs=opus", audioBitsPerSecond: 96_000 });
+  } catch (err) {
+    for (const stream of streams) for (const track of stream.getTracks()) track.stop();
+    setState("idle");
+    setStatus(`Nie udało się uruchomić nagrywania: ${err}`);
+    return;
+  }
 
-  recorder = new MediaRecorder(mix.stream, { mimeType: "audio/webm;codecs=opus", audioBitsPerSecond: 96_000 });
   recorder.ondataavailable = async (e) => {
     if (e.data.size > 0) await api.appendAudio(await e.data.arrayBuffer());
   };

@@ -17,6 +17,13 @@ const stored: Partial<Record<KeyName | "language", string>> = JSON.parse(localSt
 const key = (name: KeyName) => config[name] || stored[name] || "";
 const save = () => localStorage.setItem("bestie", JSON.stringify(stored));
 
+// The browser's recognition only hears the microphone, so don't ask to share the screen for nothing.
+if (config.elevenlabs === "browser") {
+  navigator.mediaDevices.getDisplayMedia = () => Promise.reject(new Error("tylko mikrofon"));
+  // Recognition needs the microphone to itself, so the app's own recording gets silence and nothing is held open.
+  navigator.mediaDevices.getUserMedia = async () => new AudioContext().createMediaStreamDestination().stream;
+}
+
 // MARK: - Recall bot: meeting audio in, no user gestures
 
 if (config.bot) {
@@ -41,6 +48,7 @@ if (config.bot) {
 const transcript: string[] = [];
 let board: BoardItem[] = [];
 const partialListeners: ((id: string, html: string) => void)[] = [];
+const stepListeners: ((step: string, image?: string) => void)[] = [];
 const productListeners: ((html: string) => void)[] = [];
 const drawing = new Map<string, AbortController>();
 const keys = () => ({ groq: key("groq"), anthropic: key("anthropic") });
@@ -61,7 +69,7 @@ const api: BestieApi = {
   platform: "web" as NodeJS.Platform,
   getSettings: async () => ({
     hasElevenLabsKey: !!key("elevenlabs"),
-    hasGroqKey: !!key("groq"),
+    hasGroqKey: !!key("groq") || !!config.login, // the app turns the board on only when it has something to plan with
     hasAnthropicKey: !!key("anthropic"),
     hasOpenRouterKey: !!key("openrouter"),
     language: config.lang ?? stored.language ?? "auto",
@@ -124,8 +132,16 @@ const api: BestieApi = {
   },
   onBoardPartial: (listener) => void partialListeners.push(listener),
   internetIntent: (earlier, fresh) => withClaude((apiKey) => internetIntent(apiKey, earlier, fresh)),
-  researchWeb: (request, context) => withClaude((apiKey) => researchWeb(apiKey, request, context)),
-  findImages: (request) => withClaude((apiKey) => findImages(apiKey, request)),
+  // With your login the local server can show the pages themselves, screenshotted by Chrome on this computer.
+  researchWeb: (request, context) => {
+    const shot = config.login ? (url: string) => `/shot?url=${encodeURIComponent(url)}` : undefined;
+    return withClaude((apiKey) => researchWeb(apiKey, request, context, (step, image) => stepListeners.forEach((l) => l(step, image)), shot));
+  },
+  onInternetStep: (listener) => void stepListeners.push(listener),
+  findImages: (request) =>
+    withClaude((apiKey) =>
+      findImages(apiKey, request, config.login ? async (query) => (await fetch(`/images?q=${encodeURIComponent(query)}`)).json() : undefined),
+    ),
   findVideo: (query) => withClaude((apiKey) => findVideo(apiKey, query)),
   // The base product needs a screenshot of another site, which a web page can't take.
   loadProduct: async () => {
@@ -150,7 +166,7 @@ const api: BestieApi = {
 window.bestie = api;
 
 // In the Recall version the board gets the whole screen: no transcript panel (it is still recorded and downloadable).
-document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel { display: none !important; }" }));
+if (!config.login) document.head.append(Object.assign(document.createElement("style"), { textContent: ".transcript-panel { display: none !important; }" }));
 await import("../../src/renderer/app.mts");
 
 // With your login each model call takes seconds, so the board goes live by itself and skips the extra variants.

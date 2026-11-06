@@ -132,7 +132,9 @@ function registerIpc() {
     return run(apiKey);
   };
   ipcMain.handle("internet:intent", (_e, earlier: string, fresh: string) => withClaude((key) => internetIntent(key, earlier, fresh)));
-  ipcMain.handle("internet:research", (_e, request: string, context: string) => withClaude((key) => researchWeb(key, request, context)));
+  ipcMain.handle("internet:research", (e, request: string, context: string) =>
+    withClaude((key) => researchWeb(key, request, context, (step) => e.sender.send("internet:step", step))),
+  );
   ipcMain.handle("internet:images", (_e, request: string) => withClaude((key) => findImages(key, request)));
   ipcMain.handle("internet:video", (_e, query: string) => withClaude((key) => findVideo(key, query)));
 
